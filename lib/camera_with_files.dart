@@ -5,6 +5,7 @@ library camera_with_files;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
@@ -27,13 +28,19 @@ class _CameraAppState extends State<CameraApp> {
   late List<CameraDescription> cameras;
   List<Album> imageAlbums = [];
   Set<Medium> imageMedium = {};
-  late Uint8List bytes;
+  Uint8List? bytes;
   List<File> results = [];
   List<int> indexList = [];
   bool flashOn = false;
   int camIndex = 0;
   bool showPerformance = false;
   late double width;
+  int pageIndex = 1;
+  int pageCount = 10;
+  int pageIndex2 = 1;
+  int pageCount2 = 50;
+  ScrollController bottomController = ScrollController();
+  ScrollController topController = ScrollController();
 
   ///The controller of sliding up panel
   SlidingUpPanelController panelController = SlidingUpPanelController();
@@ -59,6 +66,33 @@ class _CameraAppState extends State<CameraApp> {
       });
 
       setState(() {});
+    });
+    bottomController.addListener(() {
+      if (bottomController.position.atEdge) {
+        bool isTop = bottomController.position.pixels == 0;
+        if (!isTop) {
+          if (imageMedium.length > (pageCount2 * pageIndex2)) {
+            if (pageCount2 * (pageIndex2 + 1) > imageMedium.length) {
+              //fix here
+            }
+            setState(() {
+              pageIndex2++;
+            });
+          }
+        }
+      }
+    });
+    topController.addListener(() {
+      if (topController.position.atEdge) {
+        bool isTop = topController.position.pixels == 0;
+        if (!isTop) {
+          if (imageMedium.length > (pageCount * pageIndex)) {
+            setState(() {
+              pageIndex++;
+            });
+          }
+        }
+      }
     });
   }
 
@@ -111,50 +145,65 @@ class _CameraAppState extends State<CameraApp> {
     if (!controller!.value.isInitialized) {
       return Container();
     }
-    return Stack(
-      children: [
-        Scaffold(
-          floatingActionButton: indexList.isNotEmpty
-              ? FloatingActionButton(
-                  onPressed: () async {
-                    for (var element in indexList) {
-                      File file =
-                          await imageMedium.elementAt(element).getFile();
-                      setState(() {
-                        results.add(file);
-                      });
-                    }
+    return WillPopScope(
+      onWillPop: () {
+        if (panelController.status == SlidingUpPanelStatus.expanded) {
+          panelController.hide();
+          return Future.value(false);
+        }
+        return Future.value(true);
+      },
+      child: Stack(
+        children: [
+          Scaffold(
+            floatingActionButton: indexList.isNotEmpty
+                ? FloatingActionButton(
+                    onPressed: () async {
+                      for (var element in indexList) {
+                        File file =
+                            await imageMedium.elementAt(element).getFile();
+                        setState(() {
+                          results.add(file);
+                        });
+                      }
 
-                    Navigator.pop(context, results);
+                      Navigator.pop(context, results);
+                    },
+                    backgroundColor: Colors.greenAccent,
+                    child: const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                    ),
+                  )
+                : null,
+            body: Stack(
+              children: [
+                GestureDetector(
+                  // onHorizontalDragStart: (detalis) {
+                  //   panelController.expand();
+                  //   //print(detalis.primaryVelocity);
+                  // },
+                  onVerticalDragStart: (e) {
+                    panelController.expand();
                   },
-                  backgroundColor: Colors.greenAccent,
-                  child: const Icon(
-                    Icons.check,
-                    color: Colors.white,
+                  child: Transform.scale(
+                    scale: scale,
+                    child: Center(
+                      child: CameraPreview(controller!),
+                    ),
                   ),
-                )
-              : null,
-          body: Stack(
-            children: [
-              Transform.scale(
-                scale: scale,
-                child: Center(
-                  child: CameraPreview(controller!),
                 ),
-              ),
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Container(
-                  width: MediaQuery.of(context).size.width,
-                  height: 190,
-                  color: Colors.transparent,
-                  child: Column(
-                    children: [
-                      Column(
-                        children: [
-                          SizedBox(
-                            width: MediaQuery.of(context).size.width,
-                            child: GestureDetector(
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: MediaQuery.of(context).size.width,
+                    height: 190,
+                    color: Colors.transparent,
+                    child: Column(
+                      children: [
+                        Column(
+                          children: [
+                            GestureDetector(
                               onHorizontalDragStart: (detalis) {
                                 panelController.expand();
                                 //print(detalis.primaryVelocity);
@@ -162,45 +211,35 @@ class _CameraAppState extends State<CameraApp> {
                               onTap: () {
                                 panelController.expand();
                               },
-                              child: const Icon(
-                                Icons.arrow_drop_up_outlined,
-                                color: Colors.white,
+                              child: SizedBox(
+                                width: MediaQuery.of(context).size.width,
+                                child: const Icon(
+                                  Icons.arrow_drop_up_outlined,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
-                          ),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children:
-                                  List.generate(imageMedium.length, (index) {
-                                if (bytes == null) {
-                                  return Container();
-                                }
-                                return GestureDetector(
-                                  onLongPress: () async {
-                                    if (!widget.isMultiple) {
-                                      return;
-                                    }
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              controller: topController,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: List.generate((pageIndex * pageCount),
+                                    (index) {
+                                  if (bytes == null) {
+                                    return Container();
+                                  }
+                                  return GestureDetector(
+                                    onVerticalDragStart: (detalis) {
+                                      panelController.expand();
+                                      //print(detalis.primaryVelocity);
+                                    },
+                                    onLongPress: () async {
+                                      if (!widget.isMultiple) {
+                                        return;
+                                      }
 
-                                    if (indexList.contains(index)) {
-                                      setState(() {
-                                        indexList.remove(index);
-                                      });
-                                    } else {
-                                      setState(() {
-                                        indexList.add(index);
-                                      });
-                                    }
-                                  },
-                                  onTap: () async {
-                                    if (indexList.isEmpty) {
-                                      File file = await imageMedium
-                                          .elementAt(index)
-                                          .getFile();
-                                      Navigator.pop(context, [file]);
-                                    } else {
                                       if (indexList.contains(index)) {
                                         setState(() {
                                           indexList.remove(index);
@@ -210,268 +249,298 @@ class _CameraAppState extends State<CameraApp> {
                                           indexList.add(index);
                                         });
                                       }
-                                    }
-                                  },
-                                  child: Stack(
-                                    children: [
-                                      Container(
-                                        width: 80,
-                                        height: 80,
-                                        margin: const EdgeInsets.only(left: 2),
-                                        child: FadeInImage(
-                                          fit: BoxFit.cover,
-                                          placeholder: MemoryImage(bytes),
-                                          image: ThumbnailProvider(
-                                              mediumId: imageMedium
-                                                  .elementAt(index)
-                                                  .id,
-                                              mediumType: MediumType.image,
-                                              width: 128,
-                                              height: 128,
-                                              highQuality: true),
-                                        ),
-                                      ),
-                                      if (indexList.contains(index))
+                                    },
+                                    onTap: () async {
+                                      if (indexList.isEmpty) {
+                                        File file = await imageMedium
+                                            .elementAt(index)
+                                            .getFile();
+                                        Navigator.pop(context, [file]);
+                                      } else {
+                                        if (indexList.contains(index)) {
+                                          setState(() {
+                                            indexList.remove(index);
+                                          });
+                                        } else {
+                                          setState(() {
+                                            indexList.add(index);
+                                          });
+                                        }
+                                      }
+                                    },
+                                    child: Stack(
+                                      children: [
                                         Container(
                                           width: 80,
                                           height: 80,
                                           margin:
                                               const EdgeInsets.only(left: 2),
-                                          color: Colors.grey.withOpacity(0.4),
-                                          child: const Center(
-                                            child: Icon(
-                                              Icons.check,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        )
-                                    ],
-                                  ),
-                                );
-                              }),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    flashOn = !flashOn;
-                                    if (flashOn) {
-                                      controller!.setFlashMode(FlashMode.torch);
-                                    } else {
-                                      controller!.setFlashMode(FlashMode.off);
-                                    }
-                                  });
-                                },
-                                icon: const Icon(Icons.flash_off,
-                                    size: 30, color: Colors.white)),
-                            GestureDetector(
-                              onTap: () async {
-                                XFile file2 = await controller!.takePicture();
-                                File file = File(file2.path);
-                                Uint8List dataFile = await file.readAsBytes();
-                                String fileName = DateTime.now()
-                                    .millisecondsSinceEpoch
-                                    .toString();
-                                await ImageGallerySaver.saveImage(dataFile,
-                                    quality: 100,
-                                    name: fileName + ".jpg",
-                                    isReturnImagePathOfIOS: true);
-                                Navigator.pop(context, [file]);
-                              },
-                              child: Container(
-                                width: 75,
-                                height: 75,
-                                decoration: BoxDecoration(
-                                    // color: Colors.white,
-                                    borderRadius: const BorderRadius.all(
-                                        Radius.circular(
-                                            50) //                 <--- border radius here
+                                          child: FadeInImage(
+                                              fit: BoxFit.cover,
+                                              placeholder: MemoryImage(bytes!),
+                                              image: ThumbnailProvider(
+                                                  mediumId: imageMedium
+                                                      .elementAt(index)
+                                                      .id,
+                                                  mediumType: MediumType.image,
+                                                  width: 128,
+                                                  height: 128,
+                                                  highQuality: false)),
                                         ),
-                                    border: Border.all(
-                                        color: Colors.white, width: 3)),
+                                        if (indexList.contains(index))
+                                          Container(
+                                            width: 80,
+                                            height: 80,
+                                            margin:
+                                                const EdgeInsets.only(left: 2),
+                                            color: Colors.grey.withOpacity(0.4),
+                                            child: const Center(
+                                              child: Icon(
+                                                Icons.check,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          )
+                                      ],
+                                    ),
+                                  );
+                                }),
                               ),
                             ),
-                            (cameras.length > 1)
-                                ? IconButton(
-                                    onPressed: () {
-                                      if (camIndex + 1 >= cameras.length) {
-                                        camIndex = 0;
-                                      } else {
-                                        camIndex++;
-                                      }
-                                      controller = CameraController(
-                                          cameras[camIndex],
-                                          ResolutionPreset.veryHigh);
-                                      controller!.initialize().then((_) {
-                                        if (!mounted) {
-                                          return;
-                                        }
-                                        setState(() {});
-                                      });
-                                    },
-                                    icon: const Icon(
-                                        Icons.cameraswitch_outlined,
-                                        size: 30,
-                                        color: Colors.white))
-                                : Container(),
                           ],
                         ),
-                      )
-                    ],
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      flashOn = !flashOn;
+                                      if (flashOn) {
+                                        controller!
+                                            .setFlashMode(FlashMode.torch);
+                                      } else {
+                                        controller!.setFlashMode(FlashMode.off);
+                                      }
+                                    });
+                                  },
+                                  icon: const Icon(Icons.flash_off,
+                                      size: 30, color: Colors.white)),
+                              GestureDetector(
+                                onTap: () async {
+                                  XFile file2 = await controller!.takePicture();
+                                  File file = File(file2.path);
+                                  Uint8List dataFile = await file.readAsBytes();
+                                  String fileName = DateTime.now()
+                                      .millisecondsSinceEpoch
+                                      .toString();
+                                  await ImageGallerySaver.saveImage(dataFile,
+                                      quality: 100,
+                                      name: fileName + ".jpg",
+                                      isReturnImagePathOfIOS: true);
+                                  Navigator.pop(context, [file]);
+                                },
+                                child: Container(
+                                  width: 75,
+                                  height: 75,
+                                  decoration: BoxDecoration(
+                                      // color: Colors.white,
+                                      borderRadius: const BorderRadius.all(
+                                          Radius.circular(
+                                              50) //                 <--- border radius here
+                                          ),
+                                      border: Border.all(
+                                          color: Colors.white, width: 3)),
+                                ),
+                              ),
+                              (cameras.length > 1)
+                                  ? IconButton(
+                                      onPressed: () {
+                                        if (camIndex + 1 >= cameras.length) {
+                                          camIndex = 0;
+                                        } else {
+                                          camIndex++;
+                                        }
+                                        controller = CameraController(
+                                            cameras[camIndex],
+                                            ResolutionPreset.veryHigh);
+                                        controller!.initialize().then((_) {
+                                          if (!mounted) {
+                                            return;
+                                          }
+                                          setState(() {});
+                                        });
+                                      },
+                                      icon: const Icon(
+                                          Icons.cameraswitch_outlined,
+                                          size: 30,
+                                          color: Colors.white))
+                                  : Container(),
+                            ],
+                          ),
+                        )
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        SlidingUpPanelWidget(
-          child: imageAlbums.isEmpty
-              ? Container()
-              : Container(
-                  color: Colors.white,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: size.width,
-                        height: 50,
-                        padding: const EdgeInsets.only(left: 20, right: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            indexList.isNotEmpty
-                                ? Text(
-                                    indexList.length.toString() + " Selected")
-                                : const Text("Please Choose Images"),
-                            widget.isMultiple && indexList.isNotEmpty
-                                ? GestureDetector(
-                                    onTap: () async {
-                                      for (var element in indexList) {
-                                        File file = await imageMedium
-                                            .elementAt(element)
-                                            .getFile();
-                                        setState(() {
-                                          results.add(file);
-                                        });
-                                      }
-                                      Navigator.pop(context, results);
-                                    },
-                                    child: const Text(
-                                      "Done",
-                                      style: TextStyle(
-                                          color: Colors.blue,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  )
-                                : Container(),
-                            // TextButton(
-                            //     onPressed: () async {
-                            //
-                            //     },
-                            //     child: const Text("OK"))
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: GridView.count(
-                          crossAxisCount: 4,
-                          crossAxisSpacing: 10.0,
-                          mainAxisSpacing: 10.0,
-                          shrinkWrap: true,
-                          children: List.generate(
-                              imageMedium.length,
-                              (index) => GestureDetector(
-                                  onLongPress: () async {
-                                    if (!widget.isMultiple) {
-                                      return;
-                                    }
-                                    if (indexList.contains(index)) {
-                                      setState(() {
-                                        indexList.remove(index);
-                                      });
-                                    } else {
-                                      setState(() {
-                                        indexList.add(index);
-                                      });
-                                    }
-                                  },
-                                  onTap: () async {
-                                    if (indexList.isEmpty) {
-                                      File file = await imageMedium
-                                          .elementAt(index)
-                                          .getFile();
-                                      Navigator.pop(context, [file]);
-                                    } else {
-                                      if (indexList.contains(index)) {
-                                        setState(() {
-                                          indexList.remove(index);
-                                        });
-                                      } else {
-                                        setState(() {
-                                          indexList.add(index);
-                                        });
-                                      }
-                                    }
-                                  },
-                                  child: Stack(children: [
-                                    Container(
-                                      width: size.width / 4,
-                                      height: size.width / 4,
-                                      margin: const EdgeInsets.only(left: 2),
-                                      child: FadeInImage(
-                                        fit: BoxFit.cover,
-                                        placeholder: MemoryImage(bytes),
-                                        image: ThumbnailProvider(
-                                            mediumId:
-                                                imageMedium.elementAt(index).id,
-                                            mediumType: MediumType.image,
-                                            highQuality: true),
+          SlidingUpPanelWidget(
+            child: imageAlbums.isEmpty
+                ? Container()
+                : Container(
+                    color: Colors.white,
+                    child: Column(
+                      children: [
+                        Container(
+                          width: size.width,
+                          height: 50,
+                          padding: const EdgeInsets.only(left: 20, right: 20),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              indexList.isNotEmpty
+                                  ? Text(
+                                      indexList.length.toString() + " Selected")
+                                  : const Text("Please Choose Images"),
+                              widget.isMultiple && indexList.isNotEmpty
+                                  ? GestureDetector(
+                                      onTap: () async {
+                                        for (var element in indexList) {
+                                          File file = await imageMedium
+                                              .elementAt(element)
+                                              .getFile();
+                                          setState(() {
+                                            results.add(file);
+                                          });
+                                        }
+                                        Navigator.pop(context, results);
+                                      },
+                                      child: const Text(
+                                        "Done",
+                                        style: TextStyle(
+                                            color: Colors.blue,
+                                            fontWeight: FontWeight.bold),
                                       ),
-                                    ),
-                                    if (indexList.contains(index))
-                                      Container(
-                                        margin: const EdgeInsets.only(left: 2),
-                                        color: Colors.grey.withOpacity(0.4),
-                                        child: const Center(
-                                          child: Icon(
-                                            Icons.check,
-                                            color: Colors.white,
+                                    )
+                                  : Container(),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: NotificationListener(
+                            onNotification: (t) {
+                              if (t is ScrollEndNotification) {
+                                if (bottomController.position.pixels == 0.0) {
+                                  panelController.collapse();
+                                }
+                                print(bottomController.position.pixels);
+                                return true;
+                              }
+                              return false;
+                            },
+                            child: GridView.count(
+                              crossAxisCount: 4,
+                              crossAxisSpacing: 10.0,
+                              mainAxisSpacing: 10.0,
+                              controller: bottomController,
+                              shrinkWrap: true,
+                              children: List.generate(
+                                  pageCount2 * pageIndex2,
+                                  (index) => GestureDetector(
+                                      onLongPress: () async {
+                                        if (!widget.isMultiple) {
+                                          return;
+                                        }
+                                        if (indexList.contains(index)) {
+                                          setState(() {
+                                            indexList.remove(index);
+                                          });
+                                        } else {
+                                          setState(() {
+                                            indexList.add(index);
+                                          });
+                                        }
+                                      },
+                                      onTap: () async {
+                                        if (indexList.isEmpty) {
+                                          File file = await imageMedium
+                                              .elementAt(index)
+                                              .getFile();
+                                          Navigator.pop(context, [file]);
+                                        } else {
+                                          if (indexList.contains(index)) {
+                                            setState(() {
+                                              indexList.remove(index);
+                                            });
+                                          } else {
+                                            setState(() {
+                                              indexList.add(index);
+                                            });
+                                          }
+                                        }
+                                      },
+                                      child: Stack(children: [
+                                        Container(
+                                          width: size.width / 4,
+                                          height: size.width / 4,
+                                          margin:
+                                              const EdgeInsets.only(left: 2),
+                                          child: FadeInImage(
+                                            fit: BoxFit.cover,
+                                            placeholder: MemoryImage(bytes!),
+                                            image: ThumbnailProvider(
+                                                mediumId: imageMedium
+                                                    .elementAt(index)
+                                                    .id,
+                                                mediumType: MediumType.image,
+                                                highQuality: false),
                                           ),
                                         ),
-                                      )
-                                  ]))),
+                                        if (indexList.contains(index))
+                                          Container(
+                                            margin:
+                                                const EdgeInsets.only(left: 2),
+                                            color: Colors.grey.withOpacity(0.4),
+                                            child: const Center(
+                                              child: Icon(
+                                                Icons.check,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          )
+                                      ]))),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  )),
-          controlHeight: 0.0,
-          anchor: 0.0,
-          panelController: panelController,
-          dragDown: (details) {
-            debugPrint("Drag Down");
-          },
-          dragStart: (details) {
-            debugPrint('dragStart');
-          },
-          dragCancel: () {
-            debugPrint('dragCancel');
-          },
-          dragUpdate: (details) {
-            double x = details.localPosition.dx;
-            debugPrint(x.toString());
-            debugPrint(
-                'dragUpdate,${panelController.status == SlidingUpPanelStatus.dragging ? 'dragging' : ''}');
-          },
-          dragEnd: (details) {
-            debugPrint('dragEnd');
-          },
-        ),
-      ],
+                      ],
+                    )),
+            controlHeight: 0.0,
+            anchor: 0.0,
+            panelController: panelController,
+            dragDown: (details) {
+              debugPrint("Drag Down");
+            },
+            dragStart: (details) {
+              debugPrint('dragStart');
+            },
+            dragCancel: () {
+              debugPrint('dragCancel');
+            },
+            dragUpdate: (details) {
+              double x = details.localPosition.dx;
+              debugPrint(x.toString());
+              debugPrint(
+                  'dragUpdate,${panelController.status == SlidingUpPanelStatus.dragging ? 'dragging' : ''}');
+            },
+            dragEnd: (details) {
+              debugPrint('dragEnd');
+            },
+          ),
+        ],
+      ),
     );
   }
 
