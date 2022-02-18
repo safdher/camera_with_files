@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_null_comparison
+
 library camera_with_files;
 
 import 'dart:async';
@@ -12,6 +14,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_gallery/photo_gallery.dart';
 
 class CameraApp extends StatefulWidget {
+  final bool isMultiple;
+
+  const CameraApp({Key? key, this.isMultiple = false}) : super(key: key);
+
   @override
   _CameraAppState createState() => _CameraAppState();
 }
@@ -19,8 +25,8 @@ class CameraApp extends StatefulWidget {
 class _CameraAppState extends State<CameraApp> {
   CameraController? controller;
   late List<CameraDescription> cameras;
-  late List<Album> imageAlbums;
-  late List<Medium> imageMedium;
+  List<Album> imageAlbums = [];
+  Set<Medium> imageMedium = {};
   late Uint8List bytes;
   List<File> results = [];
   List<int> indexList = [];
@@ -39,14 +45,19 @@ class _CameraAppState extends State<CameraApp> {
   }
 
   cameraLoad() async {
-    _promptPermissionSetting();
-    loadImages();
     cameras = await availableCameras();
     controller = CameraController(cameras[0], ResolutionPreset.max);
     controller!.initialize().then((_) {
       if (!mounted) {
         return;
       }
+      _promptPermissionSetting().then((_) {
+        if (_) {
+          loadImages();
+        }
+        setState(() {});
+      });
+
       setState(() {});
     });
   }
@@ -65,11 +76,11 @@ class _CameraAppState extends State<CameraApp> {
     imageAlbums = await PhotoGallery.listAlbums(
       mediumType: MediumType.image,
     );
-    imageMedium = [];
-    imageAlbums.forEach((element) async {
+    imageMedium = {};
+    for (var element in imageAlbums) {
       var data = await element.listMedia();
       imageMedium.addAll(data.items);
-    });
+    }
     var dataB = await rootBundle.load('assets/ss.png');
     bytes = dataB.buffer.asUint8List(dataB.offsetInBytes, dataB.lengthInBytes);
     setState(() {});
@@ -92,9 +103,9 @@ class _CameraAppState extends State<CameraApp> {
     try {
       scale = size.aspectRatio * camera.aspectRatio;
     } catch (e) {
-      print(e);
+      debugPrint(e.toString());
     }
-    // to prevent scaling down, invert the value
+
     if (scale < 1) scale = 1 / scale;
 
     if (!controller!.value.isInitialized) {
@@ -107,7 +118,8 @@ class _CameraAppState extends State<CameraApp> {
               ? FloatingActionButton(
                   onPressed: () async {
                     for (var element in indexList) {
-                      File file = await imageMedium[element].getFile();
+                      File file =
+                          await imageMedium.elementAt(element).getFile();
                       setState(() {
                         results.add(file);
                       });
@@ -168,6 +180,10 @@ class _CameraAppState extends State<CameraApp> {
                                 }
                                 return GestureDetector(
                                   onLongPress: () async {
+                                    if (!widget.isMultiple) {
+                                      return;
+                                    }
+
                                     if (indexList.contains(index)) {
                                       setState(() {
                                         indexList.remove(index);
@@ -180,8 +196,9 @@ class _CameraAppState extends State<CameraApp> {
                                   },
                                   onTap: () async {
                                     if (indexList.isEmpty) {
-                                      File file =
-                                          await imageMedium[index].getFile();
+                                      File file = await imageMedium
+                                          .elementAt(index)
+                                          .getFile();
                                       Navigator.pop(context, [file]);
                                     } else {
                                       if (indexList.contains(index)) {
@@ -205,7 +222,9 @@ class _CameraAppState extends State<CameraApp> {
                                           fit: BoxFit.cover,
                                           placeholder: MemoryImage(bytes),
                                           image: ThumbnailProvider(
-                                              mediumId: imageMedium[index].id,
+                                              mediumId: imageMedium
+                                                  .elementAt(index)
+                                                  .id,
                                               mediumType: MediumType.image,
                                               width: 128,
                                               height: 128,
@@ -256,12 +275,13 @@ class _CameraAppState extends State<CameraApp> {
                                 XFile file2 = await controller!.takePicture();
                                 File file = File(file2.path);
                                 Uint8List dataFile = await file.readAsBytes();
-                                dynamic result =
-                                    await ImageGallerySaver.saveImage(dataFile,
-                                        quality: 100,
-                                        name: "test.jpg",
-                                        isReturnImagePathOfIOS: true);
-                                print(result);
+                                String fileName = DateTime.now()
+                                    .millisecondsSinceEpoch
+                                    .toString();
+                                await ImageGallerySaver.saveImage(dataFile,
+                                    quality: 100,
+                                    name: fileName + ".jpg",
+                                    isReturnImagePathOfIOS: true);
                                 Navigator.pop(context, [file]);
                               },
                               child: Container(
@@ -328,18 +348,32 @@ class _CameraAppState extends State<CameraApp> {
                                 ? Text(
                                     indexList.length.toString() + " Selected")
                                 : const Text("Please Choose Images"),
-                            TextButton(
-                                onPressed: () async {
-                                  for (var element in indexList) {
-                                    File file =
-                                        await imageMedium[element].getFile();
-                                    setState(() {
-                                      results.add(file);
-                                    });
-                                  }
-                                  Navigator.pop(context, results);
-                                },
-                                child: const Text("OK"))
+                            widget.isMultiple && indexList.isNotEmpty
+                                ? GestureDetector(
+                                    onTap: () async {
+                                      for (var element in indexList) {
+                                        File file = await imageMedium
+                                            .elementAt(element)
+                                            .getFile();
+                                        setState(() {
+                                          results.add(file);
+                                        });
+                                      }
+                                      Navigator.pop(context, results);
+                                    },
+                                    child: const Text(
+                                      "Done",
+                                      style: TextStyle(
+                                          color: Colors.blue,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  )
+                                : Container(),
+                            // TextButton(
+                            //     onPressed: () async {
+                            //
+                            //     },
+                            //     child: const Text("OK"))
                           ],
                         ),
                       ),
@@ -353,6 +387,9 @@ class _CameraAppState extends State<CameraApp> {
                               imageMedium.length,
                               (index) => GestureDetector(
                                   onLongPress: () async {
+                                    if (!widget.isMultiple) {
+                                      return;
+                                    }
                                     if (indexList.contains(index)) {
                                       setState(() {
                                         indexList.remove(index);
@@ -365,8 +402,9 @@ class _CameraAppState extends State<CameraApp> {
                                   },
                                   onTap: () async {
                                     if (indexList.isEmpty) {
-                                      File file =
-                                          await imageMedium[index].getFile();
+                                      File file = await imageMedium
+                                          .elementAt(index)
+                                          .getFile();
                                       Navigator.pop(context, [file]);
                                     } else {
                                       if (indexList.contains(index)) {
@@ -389,7 +427,8 @@ class _CameraAppState extends State<CameraApp> {
                                         fit: BoxFit.cover,
                                         placeholder: MemoryImage(bytes),
                                         image: ThumbnailProvider(
-                                            mediumId: imageMedium[index].id,
+                                            mediumId:
+                                                imageMedium.elementAt(index).id,
                                             mediumType: MediumType.image,
                                             highQuality: true),
                                       ),
@@ -414,22 +453,22 @@ class _CameraAppState extends State<CameraApp> {
           anchor: 0.0,
           panelController: panelController,
           dragDown: (details) {
-            print('dragDown');
+            debugPrint("Drag Down");
           },
           dragStart: (details) {
-            print('dragStart');
+            debugPrint('dragStart');
           },
           dragCancel: () {
-            print('dragCancel');
+            debugPrint('dragCancel');
           },
           dragUpdate: (details) {
             double x = details.localPosition.dx;
-            print(x);
-            print(
+            debugPrint(x.toString());
+            debugPrint(
                 'dragUpdate,${panelController.status == SlidingUpPanelStatus.dragging ? 'dragging' : ''}');
           },
           dragEnd: (details) {
-            print('dragEnd');
+            debugPrint('dragEnd');
           },
         ),
       ],

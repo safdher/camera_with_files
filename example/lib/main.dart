@@ -1,14 +1,15 @@
 import 'dart:io';
-
 import 'package:camera_with_files/camera_with_files.dart';
 import 'package:flutter/material.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(MaterialApp(home: MyApp()));
+  runApp(const MaterialApp(home: MyApp()));
 }
 
 class MyApp extends StatefulWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
   _MyAppState createState() => _MyAppState();
 }
@@ -31,7 +32,9 @@ class _MyAppState extends State<MyApp> {
                 onPressed: () async {
                   var data = await Navigator.of(context).push(
                     MaterialPageRoute<List<File>>(
-                      builder: (BuildContext context) => CameraApp(),
+                      builder: (BuildContext context) => const CameraApp(
+                        isMultiple: true,
+                      ),
                     ),
                   );
                   if (data != null) {
