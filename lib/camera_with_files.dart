@@ -41,6 +41,7 @@ class _CameraAppState extends State<CameraApp> {
   int pageCount2 = 50;
   ScrollController bottomController = ScrollController();
   ScrollController topController = ScrollController();
+  int scroll = 0;
 
   ///The controller of sliding up panel
   SlidingUpPanelController panelController = SlidingUpPanelController();
@@ -434,7 +435,13 @@ class _CameraAppState extends State<CameraApp> {
                             onNotification: (t) {
                               if (t is ScrollEndNotification) {
                                 if (bottomController.position.pixels == 0.0) {
-                                  panelController.collapse();
+                                  scroll++;
+                                  print(scroll);
+                                  if (scroll.isOdd) {
+                                    print(scroll);
+                                    panelController.collapse();
+                                    scroll = 1;
+                                  }
                                 }
                                 print(bottomController.position.pixels);
                                 return true;
