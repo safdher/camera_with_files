@@ -204,16 +204,16 @@ class _CameraAppState extends State<CameraApp> {
                       children: [
                         Column(
                           children: [
-                            GestureDetector(
-                              onHorizontalDragStart: (detalis) {
-                                panelController.expand();
-                                //print(detalis.primaryVelocity);
-                              },
-                              onTap: () {
-                                panelController.expand();
-                              },
-                              child: SizedBox(
-                                width: MediaQuery.of(context).size.width,
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width,
+                              child: GestureDetector(
+                                onHorizontalDragStart: (detalis) {
+                                  panelController.expand();
+                                  //print(detalis.primaryVelocity);
+                                },
+                                onTap: () {
+                                  panelController.expand();
+                                },
                                 child: const Icon(
                                   Icons.arrow_drop_up_outlined,
                                   color: Colors.white,
