@@ -5,3 +5,7 @@
 
 * Camera Access With files Bug Fixes
 
+## 0.0.3
+
+* Camera Access With files Bug Fixes
+

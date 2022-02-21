@@ -39,6 +39,9 @@ class _CameraAppState extends State<CameraApp> {
   int pageCount = 10;
   int pageIndex2 = 1;
   int pageCount2 = 50;
+
+  int count = 0;
+  int count2 = 0;
   ScrollController bottomController = ScrollController();
   ScrollController topController = ScrollController();
   int scroll = 0;
@@ -73,12 +76,15 @@ class _CameraAppState extends State<CameraApp> {
         bool isTop = bottomController.position.pixels == 0;
         if (!isTop) {
           if (imageMedium.length > (pageCount2 * pageIndex2)) {
-            if (pageCount2 * (pageIndex2 + 1) > imageMedium.length) {
-              //fix here
-            }
             setState(() {
               pageIndex2++;
             });
+            if (pageCount2 * (pageIndex2) > imageMedium.length) {
+              //fix here
+              count2 = imageMedium.length;
+            } else {
+              count2 = pageCount2 * pageIndex2;
+            }
           }
         }
       }
@@ -91,6 +97,12 @@ class _CameraAppState extends State<CameraApp> {
             setState(() {
               pageIndex++;
             });
+            if (pageCount * (pageIndex) > imageMedium.length) {
+              //fix here
+              count = imageMedium.length;
+            } else {
+              count = pageCount * pageIndex;
+            }
           }
         }
       }
@@ -118,6 +130,18 @@ class _CameraAppState extends State<CameraApp> {
     }
     var dataB = await rootBundle.load('assets/ss.png');
     bytes = dataB.buffer.asUint8List(dataB.offsetInBytes, dataB.lengthInBytes);
+    if (pageCount2 * (pageIndex2) > imageMedium.length) {
+      //fix here
+      count2 = imageMedium.length;
+    } else {
+      count2 = pageCount2 * (pageIndex2);
+    }
+    if (pageCount * (pageIndex) > imageMedium.length) {
+      //fix here
+      count = imageMedium.length;
+    } else {
+      count = pageCount * (pageIndex);
+    }
     setState(() {});
   }
 
@@ -226,8 +250,7 @@ class _CameraAppState extends State<CameraApp> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.start,
-                                children: List.generate((pageIndex * pageCount),
-                                    (index) {
+                                children: List.generate(count, (index) {
                                   if (bytes == null) {
                                     return Container();
                                   }
@@ -455,7 +478,7 @@ class _CameraAppState extends State<CameraApp> {
                               controller: bottomController,
                               shrinkWrap: true,
                               children: List.generate(
-                                  pageCount2 * pageIndex2,
+                                  count2,
                                   (index) => GestureDetector(
                                       onLongPress: () async {
                                         if (!widget.isMultiple) {
