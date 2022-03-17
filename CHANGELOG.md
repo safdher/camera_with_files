@@ -9,3 +9,6 @@
 
 * Camera Access With files Bug Fixes
 
+## 0.0.4
+
+* ios Permission Change Bug Fixes

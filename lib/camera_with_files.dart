@@ -1,11 +1,8 @@
-// ignore_for_file: unnecessary_null_comparison
-
 library camera_with_files;
 
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
@@ -110,11 +107,16 @@ class _CameraAppState extends State<CameraApp> {
   }
 
   Future<bool> _promptPermissionSetting() async {
-    if (Platform.isIOS &&
-            await Permission.storage.request().isGranted &&
-            await Permission.photos.request().isGranted ||
-        Platform.isAndroid && await Permission.storage.request().isGranted) {
-      return true;
+    if (Platform.isIOS) {
+      PermissionStatus status = await Permission.storage.request();
+      PermissionStatus status2 = await Permission.photos.request();
+      PermissionStatus status3 = await Permission.mediaLibrary.request();
+
+      return status.isGranted && status2.isGranted && status3.isGranted;
+    } else if (Platform.isAndroid) {
+      PermissionStatus status = await Permission.storage.request();
+
+      return status.isGranted;
     }
     return false;
   }
