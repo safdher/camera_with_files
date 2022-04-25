@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:camera_with_files/camera_with_files.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 Future<void> main() async {
@@ -26,6 +27,9 @@ class _MyAppState extends State<MyApp> {
             children: [
               if (files.isNotEmpty)
                 ...files.map<Image>((ele) {
+                  if (kIsWeb) {
+                    return Image.network(ele.path);
+                  }
                   return Image.file(ele);
                 }).toList(),
               TextButton(

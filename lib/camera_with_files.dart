@@ -3,6 +3,7 @@ library camera_with_files;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_sliding_up_panel/flutter_sliding_up_panel.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_gallery/photo_gallery.dart';
+import 'package:image_picker/image_picker.dart';
 
 class CameraApp extends StatefulWidget {
   final bool isMultiple;
@@ -107,21 +109,24 @@ class _CameraAppState extends State<CameraApp> {
   }
 
   Future<bool> _promptPermissionSetting() async {
-    if (Platform.isIOS) {
+    if (kIsWeb) {
+      return true;
+    } else if (Platform.isIOS) {
       PermissionStatus status = await Permission.storage.request();
       PermissionStatus status2 = await Permission.photos.request();
       PermissionStatus status3 = await Permission.mediaLibrary.request();
-
       return status.isGranted && status2.isGranted && status3.isGranted;
     } else if (Platform.isAndroid) {
       PermissionStatus status = await Permission.storage.request();
-
       return status.isGranted;
     }
     return false;
   }
 
   loadImages() async {
+    if (kIsWeb) {
+      return;
+    }
     imageAlbums = await PhotoGallery.listAlbums(
       mediumType: MediumType.image,
     );
@@ -234,10 +239,31 @@ class _CameraAppState extends State<CameraApp> {
                               width: MediaQuery.of(context).size.width,
                               child: GestureDetector(
                                 onHorizontalDragStart: (detalis) {
+                                  if (kIsWeb) {
+                                    return;
+                                  }
                                   panelController.expand();
                                   //print(detalis.primaryVelocity);
                                 },
-                                onTap: () {
+                                onTap: () async {
+                                  if (kIsWeb) {
+                                    final ImagePicker _picker = ImagePicker();
+                                    if (widget.isMultiple) {
+                                      List<XFile>? images =
+                                          await _picker.pickMultiImage();
+                                      List<File> file = [];
+                                      images!.forEach((element) {
+                                        file.add(File(element.path));
+                                      });
+                                      Navigator.pop(context, file);
+                                    } else {
+                                      XFile? image = await _picker.pickImage(
+                                          source: ImageSource.gallery);
+                                      File file = File(image!.path);
+                                      Navigator.pop(context, [file]);
+                                    }
+                                    return;
+                                  }
                                   panelController.expand();
                                 },
                                 child: const Icon(
@@ -246,43 +272,27 @@ class _CameraAppState extends State<CameraApp> {
                                 ),
                               ),
                             ),
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              controller: topController,
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                children: List.generate(count, (index) {
-                                  if (bytes == null) {
-                                    return Container();
-                                  }
-                                  return GestureDetector(
-                                    onVerticalDragStart: (detalis) {
-                                      panelController.expand();
-                                      //print(detalis.primaryVelocity);
-                                    },
-                                    onLongPress: () async {
-                                      if (!widget.isMultiple) {
-                                        return;
-                                      }
+                            if (!kIsWeb)
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                controller: topController,
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: List.generate(count, (index) {
+                                    if (bytes == null) {
+                                      return Container();
+                                    }
+                                    return GestureDetector(
+                                      onVerticalDragStart: (detalis) {
+                                        panelController.expand();
+                                        //print(detalis.primaryVelocity);
+                                      },
+                                      onLongPress: () async {
+                                        if (!widget.isMultiple) {
+                                          return;
+                                        }
 
-                                      if (indexList.contains(index)) {
-                                        setState(() {
-                                          indexList.remove(index);
-                                        });
-                                      } else {
-                                        setState(() {
-                                          indexList.add(index);
-                                        });
-                                      }
-                                    },
-                                    onTap: () async {
-                                      if (indexList.isEmpty) {
-                                        File file = await imageMedium
-                                            .elementAt(index)
-                                            .getFile();
-                                        Navigator.pop(context, [file]);
-                                      } else {
                                         if (indexList.contains(index)) {
                                           setState(() {
                                             indexList.remove(index);
@@ -292,79 +302,105 @@ class _CameraAppState extends State<CameraApp> {
                                             indexList.add(index);
                                           });
                                         }
-                                      }
-                                    },
-                                    child: Stack(
-                                      children: [
-                                        Container(
-                                          width: 80,
-                                          height: 80,
-                                          margin:
-                                              const EdgeInsets.only(left: 2),
-                                          child: FadeInImage(
-                                              fit: BoxFit.cover,
-                                              placeholder: MemoryImage(bytes!),
-                                              image: ThumbnailProvider(
-                                                  mediumId: imageMedium
-                                                      .elementAt(index)
-                                                      .id,
-                                                  mediumType: MediumType.image,
-                                                  width: 128,
-                                                  height: 128,
-                                                  highQuality: false)),
-                                        ),
-                                        if (indexList.contains(index))
+                                      },
+                                      onTap: () async {
+                                        if (indexList.isEmpty) {
+                                          File file = await imageMedium
+                                              .elementAt(index)
+                                              .getFile();
+                                          Navigator.pop(context, [file]);
+                                        } else {
+                                          if (indexList.contains(index)) {
+                                            setState(() {
+                                              indexList.remove(index);
+                                            });
+                                          } else {
+                                            setState(() {
+                                              indexList.add(index);
+                                            });
+                                          }
+                                        }
+                                      },
+                                      child: Stack(
+                                        children: [
                                           Container(
                                             width: 80,
                                             height: 80,
                                             margin:
                                                 const EdgeInsets.only(left: 2),
-                                            color: Colors.grey.withOpacity(0.4),
-                                            child: const Center(
-                                              child: Icon(
-                                                Icons.check,
-                                                color: Colors.white,
+                                            child: FadeInImage(
+                                                fit: BoxFit.cover,
+                                                placeholder:
+                                                    MemoryImage(bytes!),
+                                                image: ThumbnailProvider(
+                                                    mediumId: imageMedium
+                                                        .elementAt(index)
+                                                        .id,
+                                                    mediumType:
+                                                        MediumType.image,
+                                                    width: 128,
+                                                    height: 128,
+                                                    highQuality: false)),
+                                          ),
+                                          if (indexList.contains(index))
+                                            Container(
+                                              width: 80,
+                                              height: 80,
+                                              margin: const EdgeInsets.only(
+                                                  left: 2),
+                                              color:
+                                                  Colors.grey.withOpacity(0.4),
+                                              child: const Center(
+                                                child: Icon(
+                                                  Icons.check,
+                                                  color: Colors.white,
+                                                ),
                                               ),
-                                            ),
-                                          )
-                                      ],
-                                    ),
-                                  );
-                                }),
+                                            )
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ),
                               ),
-                            ),
                           ],
                         ),
                         Expanded(
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      flashOn = !flashOn;
-                                      if (flashOn) {
-                                        controller!
-                                            .setFlashMode(FlashMode.torch);
-                                      } else {
-                                        controller!.setFlashMode(FlashMode.off);
-                                      }
-                                    });
-                                  },
-                                  icon: const Icon(Icons.flash_off,
-                                      size: 30, color: Colors.white)),
+                              (!kIsWeb)
+                                  ? IconButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          flashOn = !flashOn;
+                                          if (flashOn) {
+                                            controller!
+                                                .setFlashMode(FlashMode.torch);
+                                          } else {
+                                            controller!
+                                                .setFlashMode(FlashMode.off);
+                                          }
+                                        });
+                                      },
+                                      icon: const Icon(Icons.flash_off,
+                                          size: 30, color: Colors.white))
+                                  : Container(),
                               GestureDetector(
                                 onTap: () async {
                                   XFile file2 = await controller!.takePicture();
                                   File file = File(file2.path);
-                                  Uint8List dataFile = await file.readAsBytes();
-                                  String fileName = DateTime.now()
-                                      .millisecondsSinceEpoch
-                                      .toString();
-                                  await ImageGallerySaver.saveImage(dataFile,
-                                      quality: 100,
-                                      name: fileName + ".jpg",
-                                      isReturnImagePathOfIOS: true);
+                                  if (!kIsWeb) {
+                                    Uint8List dataFile =
+                                        await file.readAsBytes();
+                                    String fileName = DateTime.now()
+                                        .millisecondsSinceEpoch
+                                        .toString();
+                                    await ImageGallerySaver.saveImage(dataFile,
+                                        quality: 100,
+                                        name: fileName + ".jpg",
+                                        isReturnImagePathOfIOS: true);
+                                  }
                                   Navigator.pop(context, [file]);
                                 },
                                 child: Container(
@@ -380,7 +416,7 @@ class _CameraAppState extends State<CameraApp> {
                                           color: Colors.white, width: 3)),
                                 ),
                               ),
-                              (cameras.length > 1)
+                              (!kIsWeb && (cameras.length > 1))
                                   ? IconButton(
                                       onPressed: () {
                                         if (camIndex + 1 >= cameras.length) {
@@ -402,7 +438,7 @@ class _CameraAppState extends State<CameraApp> {
                                           Icons.cameraswitch_outlined,
                                           size: 30,
                                           color: Colors.white))
-                                  : Container(),
+                                  : Container()
                             ],
                           ),
                         )

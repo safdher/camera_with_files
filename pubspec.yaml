@@ -1,6 +1,6 @@
 name: camera_with_files
 description: Make a Camera Module With Gallery View. Its Looks Like whatsapp Camera Module.
-version: 0.0.4
+version: 0.0.5
 homepage: https://github.com/safdher/camera_with_files
 
 environment:
@@ -13,8 +13,9 @@ dependencies:
   photo_gallery: ^1.1.1
   permission_handler: ^9.1.0
   image_gallery_saver: ^1.7.1
-  camera: ^0.9.4+14
+  camera: ^0.9.4+20
   flutter_sliding_up_panel: ^2.0.1
+  image_picker: ^0.8.5
   
 dev_dependencies:
   flutter_test:
