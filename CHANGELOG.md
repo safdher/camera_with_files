@@ -12,3 +12,7 @@
 ## 0.0.4
 
 * ios Permission Change Bug Fixes
+
+## 0.0.5
+
+* Web Issues Fixed
