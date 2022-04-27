@@ -1,18 +1,33 @@
-<!-- 
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# Camera with image picker
+## Whatsapp like UI 
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/guides/libraries/writing-package-pages). 
+[![N|Solid](https://drive.google.com/uc?export=download&id=1DsQ47pXQfhFhFnHA_xycXySI2_wW669F)]()
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-library-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/developing-packages). 
--->
+Camera with image picker works on android, ios and Web.
+- Multiple image selection.
+- optional single image selection.
+- camera switching
+- flash light
 
-Open Camera With files Like WhatsApp
 
-## Features
 
-Open Both Camera and Photots in a Single Screen
+## Usage
+
+Navigate to the camerApp page and after selecting image or taking photo from camera will return the selected list of files
+## For Multiple image selection
+```sh
+List<File> data = await Navigator.of(context).push(MaterialPageRoute<List<File>>(
+builder:(BuildContext context)=> const CameraApp(
+//multiple image selection flag
+isMultiple :true
+),),);
+```
+## For Single image selection
+data[0] will contain the file.
+```sh
+List<File> data = await Navigator.of(context).push(MaterialPageRoute<List<File>>(
+builder:(BuildContext context)=> const CameraApp(
+//multiple image selection flag
+isMultiple :false
+),),);
+```
