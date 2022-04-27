@@ -16,3 +16,7 @@
 ## 0.0.5
 
 * Web Issues Fixed
+
+## 0.0.6
+
+* Readme File Added
