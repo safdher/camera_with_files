@@ -20,3 +20,12 @@
 ## 0.0.6
 
 * Readme File Added
+
+## 0.0.7
+
+* New Compression Method added.
+* File Picker Added for Latest Images and Drive access.
+
+## 0.0.8
+
+* Memory File Removed

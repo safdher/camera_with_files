@@ -7,16 +7,28 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_sliding_up_panel/flutter_sliding_up_panel.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_gallery/photo_gallery.dart';
 import 'package:image_picker/image_picker.dart';
+import "package:intl/intl.dart";
+import 'package:path_provider/path_provider.dart';
 
 class CameraApp extends StatefulWidget {
   final bool isMultiple;
+  final bool isSimpleUI;
+  int? compressionQuality;
+  int? compressedSize;
 
-  const CameraApp({Key? key, this.isMultiple = false}) : super(key: key);
+  CameraApp(
+      {Key? key,
+      this.isMultiple = false,
+      this.isSimpleUI = true,
+      this.compressedSize,
+      this.compressionQuality = 100})
+      : super(key: key);
 
   @override
   _CameraAppState createState() => _CameraAppState();
@@ -198,8 +210,7 @@ class _CameraAppState extends State<CameraApp> {
                           results.add(file);
                         });
                       }
-
-                      Navigator.pop(context, results);
+                      compress(results);
                     },
                     backgroundColor: Colors.greenAccent,
                     child: const Icon(
@@ -252,15 +263,15 @@ class _CameraAppState extends State<CameraApp> {
                                       List<XFile>? images =
                                           await _picker.pickMultiImage();
                                       List<File> file = [];
-                                      images!.forEach((element) {
+                                      for (var element in images!) {
                                         file.add(File(element.path));
-                                      });
-                                      Navigator.pop(context, file);
+                                      }
+                                      compress(file);
                                     } else {
                                       XFile? image = await _picker.pickImage(
                                           source: ImageSource.gallery);
                                       File file = File(image!.path);
-                                      Navigator.pop(context, [file]);
+                                      compress([file]);
                                     }
                                     return;
                                   }
@@ -308,7 +319,7 @@ class _CameraAppState extends State<CameraApp> {
                                           File file = await imageMedium
                                               .elementAt(index)
                                               .getFile();
-                                          Navigator.pop(context, [file]);
+                                          compress([file]);
                                         } else {
                                           if (indexList.contains(index)) {
                                             setState(() {
@@ -371,19 +382,32 @@ class _CameraAppState extends State<CameraApp> {
                             children: [
                               (!kIsWeb)
                                   ? IconButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          flashOn = !flashOn;
-                                          if (flashOn) {
-                                            controller!
-                                                .setFlashMode(FlashMode.torch);
-                                          } else {
-                                            controller!
-                                                .setFlashMode(FlashMode.off);
+                                      onPressed: () async {
+                                        final ImagePicker _picker =
+                                            ImagePicker();
+                                        if (!widget.isMultiple) {
+                                          final XFile? image =
+                                              await _picker.pickImage(
+                                                  source: ImageSource.gallery);
+                                          if (image == null) {
+                                            return;
                                           }
-                                        });
+                                          File file = File(image.path);
+                                          compress([file]);
+                                        } else {
+                                          final List<XFile>? images =
+                                              await _picker.pickMultiImage();
+                                          if (images == null) {
+                                            return;
+                                          }
+                                          List<File> file = [];
+                                          for (var element in images) {
+                                            file.add(File(element.path));
+                                          }
+                                          compress(file);
+                                        }
                                       },
-                                      icon: const Icon(Icons.flash_off,
+                                      icon: const Icon(Icons.file_open,
                                           size: 30, color: Colors.white))
                                   : Container(),
                               GestureDetector(
@@ -401,7 +425,7 @@ class _CameraAppState extends State<CameraApp> {
                                         name: fileName + ".jpg",
                                         isReturnImagePathOfIOS: true);
                                   }
-                                  Navigator.pop(context, [file]);
+                                  compress([file]);
                                 },
                                 child: Container(
                                   width: 75,
@@ -446,6 +470,36 @@ class _CameraAppState extends State<CameraApp> {
                     ),
                   ),
                 ),
+                SafeArea(
+                  child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  flashOn = !flashOn;
+                                  if (flashOn) {
+                                    controller!.setFlashMode(FlashMode.torch);
+                                  } else {
+                                    controller!.setFlashMode(FlashMode.off);
+                                  }
+                                });
+                              },
+                              icon: const Icon(Icons.flash_off,
+                                  size: 30, color: Colors.white)),
+                          IconButton(
+                              onPressed: () {
+                                compress([]);
+                              },
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white,
+                              ))
+                        ],
+                      )),
+                ),
               ],
             ),
           ),
@@ -478,7 +532,7 @@ class _CameraAppState extends State<CameraApp> {
                                             results.add(file);
                                           });
                                         }
-                                        Navigator.pop(context, results);
+                                        compress(results);
                                       },
                                       child: const Text(
                                         "Done",
@@ -537,7 +591,7 @@ class _CameraAppState extends State<CameraApp> {
                                           File file = await imageMedium
                                               .elementAt(index)
                                               .getFile();
-                                          Navigator.pop(context, [file]);
+                                          compress([file]);
                                         } else {
                                           if (indexList.contains(index)) {
                                             setState(() {
@@ -616,5 +670,48 @@ class _CameraAppState extends State<CameraApp> {
     setState(() {
       showPerformance = !showPerformance;
     });
+  }
+
+  compress(List<File> files) async {
+    List<File> files2 = [];
+    for (File file in files) {
+      Uint8List? blobBytes = await testCompressFile(file);
+      var dir = await getTemporaryDirectory();
+      String trimmed = dir.absolute.path;
+      String dateTimeString =
+          dateTimeToString(DateTime.now(), "dd-yyyy-MMM HH:mm a");
+      String pathString = trimmed + "/" + dateTimeString + ".jpg";
+      File fileNew = File(pathString);
+      fileNew.writeAsBytesSync(List.from(blobBytes!));
+      files2.add(fileNew);
+    }
+
+    Navigator.pop(context, files2);
+  }
+
+  String dateTimeToString(DateTime dateTime, String pattern) {
+    final format = DateFormat(pattern);
+    return format.format(dateTime);
+  }
+
+  Future<Uint8List?> testCompressFile(File file) async {
+    // int quality = widget.compressionQuality!;
+    var decodedImage = await decodeImageFromList(file.readAsBytesSync());
+    // if (widget.compressedSize != null) {
+    //   int size = await file.length();
+    //   int qualitySize = widget.compressedSize!;
+    //   if (size > qualitySize) {
+    //     quality = (qualitySize / size * 100).ceil();
+    //   }
+    // }
+    var result = await FlutterImageCompress.compressWithFile(file.absolute.path,
+        minHeight: decodedImage.height,
+        minWidth: decodedImage.width,
+        quality: widget.compressionQuality!);
+
+    // int size = await file.length();
+    // print("Original Size");
+    // print(size);
+    return result;
   }
 }
