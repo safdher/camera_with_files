@@ -29,3 +29,7 @@
 ## 0.0.8
 
 * Memory File Removed
+
+## 0.0.9
+
+*iOS fix
