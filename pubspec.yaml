@@ -1,6 +1,6 @@
 name: camera_with_files
 description: Make a Camera Module With Gallery View. Its Looks Like whatsapp Camera Module.
-version: 0.0.9
+version: 0.0.10
 homepage: https://github.com/safdher/camera_with_files
 
 environment:

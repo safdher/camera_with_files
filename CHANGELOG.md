@@ -32,4 +32,8 @@
 
 ## 0.0.9
 
-*iOS fix
+* iOS fix
+
+## 0.0.10
+
+* iOS Changes
