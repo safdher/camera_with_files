@@ -66,8 +66,8 @@ class _HomePageState extends State<HomePage> {
                       builder: (_) => const CameraApp(
                         compressionQuality: .5,
                         isMultipleSelection: false,
-                        showGallery: false,
-                        showOpenGalleryButton: false,
+                        // showGallery: false,
+                        // showOpenGalleryButton: false,
                       ),
                     ),
                   );
