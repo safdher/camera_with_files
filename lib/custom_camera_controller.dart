@@ -73,6 +73,7 @@ class CustomCameraController extends ChangeNotifier {
   VideoPlayerController? videoController;
   VoidCallback? videoPlayerListener;
   File? videoFile;
+  final duration = ValueNotifier(Duration.zero);
 
   final imagesCarouselController = ScrollController();
 
@@ -109,12 +110,15 @@ class CustomCameraController extends ChangeNotifier {
         cameraController.dispose();
         break;
       case AppLifecycleState.paused:
-        if (cameraController.value.isRecordingPaused) {
+        if (cameraController.value.isRecordingVideo) {
           pauseVideoRecording();
         }
         break;
 
       case AppLifecycleState.resumed:
+        if (cameraController.value.isRecordingPaused) {
+          resumeVideoRecording();
+        }
         onNewCameraSelected(cameraController.description);
         break;
 

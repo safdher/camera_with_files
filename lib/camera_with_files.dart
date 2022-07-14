@@ -84,74 +84,70 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
               debugPrint("Show a dialog");
               return Future.value(true);
             },
-            child: Stack(
-              children: [
-                Scaffold(
-                  body: Stack(
-                    children: [
-                      Center(
-                        child: ValueListenableBuilder<CameraController?>(
-                            valueListenable: controller.controller,
-                            builder: (context, val, _) {
-                              if (val == null || !val.value.isInitialized) {
-                                debugPrint("Camera isn't initialized");
-                                return const SizedBox.shrink();
-                              }
-                              final size = MediaQuery.of(context).size;
-                              return SizedBox.fromSize(
-                                size: size,
-                                child: CameraPreview(val),
-                              );
-                            }),
-                      ),
-                      Align(
-                        alignment: Alignment.bottomCenter,
-                        child: BottomPanel(
-                          showGallery: widget.showGallery,
-                          showOpenGalleryButton: widget.showOpenGalleryButton,
-                        ),
-                      ),
-                      SafeArea(
-                        child: Align(
-                            alignment: Alignment.topCenter,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                IconButton(
-                                  onPressed: Navigator.of(context).pop,
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                IconButton(
-                                  onPressed: controller.toggleFlash,
-                                  icon: ValueListenableBuilder<bool>(
-                                    valueListenable: controller.isFlashOn,
-                                    builder: (_, val, child) {
-                                      if (val) {
-                                        return const Icon(
-                                          Icons.flash_on,
-                                          size: 30,
-                                          color: Colors.white,
-                                        );
-                                      }
-                                      return child!;
-                                    },
-                                    child: const Icon(
-                                      Icons.flash_off,
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: Stack(
+                children: [
+                  Center(
+                    child: ValueListenableBuilder<CameraController?>(
+                        valueListenable: controller.controller,
+                        builder: (context, val, _) {
+                          if (val == null || !val.value.isInitialized) {
+                            return const SizedBox.shrink();
+                          }
+                          final size = MediaQuery.of(context).size;
+                          return SizedBox.fromSize(
+                            size: size,
+                            child: CameraPreview(val),
+                          );
+                        }),
+                  ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: BottomPanel(
+                      showGallery: widget.showGallery,
+                      showOpenGalleryButton: widget.showOpenGalleryButton,
+                    ),
+                  ),
+                  SafeArea(
+                    child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              onPressed: Navigator.of(context).pop,
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: controller.toggleFlash,
+                              icon: ValueListenableBuilder<bool>(
+                                valueListenable: controller.isFlashOn,
+                                builder: (_, val, child) {
+                                  if (val) {
+                                    return const Icon(
+                                      Icons.flash_on,
                                       size: 30,
                                       color: Colors.white,
-                                    ),
-                                  ),
+                                    );
+                                  }
+                                  return child!;
+                                },
+                                child: const Icon(
+                                  Icons.flash_off,
+                                  size: 30,
+                                  color: Colors.white,
                                 ),
-                              ],
-                            )),
-                      ),
-                    ],
+                              ),
+                            ),
+                          ],
+                        )),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
