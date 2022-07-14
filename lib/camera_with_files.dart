@@ -49,7 +49,15 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
   void didChangeDependencies() {
     super.didChangeDependencies();
     controller.init();
-    precacheImage(const AssetImage("assets/placeholder.png"), context);
+    if (widget.showGallery) {
+      precacheImage(
+        const AssetImage(
+          "assets/placeholder.png",
+          package: "camera_with_files",
+        ),
+        context,
+      );
+    }
   }
 
   @override
@@ -472,8 +480,10 @@ class ImagesCarousel extends StatelessWidget {
                         margin: const EdgeInsets.only(left: 2),
                         child: FadeInImage(
                           fit: BoxFit.cover,
-                          placeholder:
-                              const AssetImage("assets/placeholder.png"),
+                          placeholder: const AssetImage(
+                            "assets/placeholder.png",
+                            package: "camera_with_files",
+                          ),
                           image: ThumbnailProvider(
                             mediumId: controller.imageMedium.value
                                 .elementAt(index)
