@@ -1,10 +1,6 @@
 # Camera with image picker
 ## Whatsapp like UI 
 
-A fork from the [CameraWithFiles](https://github.com/safdher/camera_with_files) project created by _safdher_.
-
-_As the original project is apparently not currently being maintained, I decided to keep this alternate version of the project._
-
 [![N|Solid](https://drive.google.com/uc?export=download&id=1DsQ47pXQfhFhFnHA_xycXySI2_wW669F)]()
 
 Camera with image picker works on android, ios and Web.
