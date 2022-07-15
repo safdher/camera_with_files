@@ -3,9 +3,12 @@ library camera_with_files;
 import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
+import 'package:camera_with_files/colors.dart';
 import 'package:camera_with_files/custom_camera_controller.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:photo_gallery/photo_gallery.dart';
 
 class CameraApp extends StatefulWidget {
@@ -13,7 +16,7 @@ class CameraApp extends StatefulWidget {
     super.key,
     this.compressionQuality = 1,
     this.isMultipleSelection = true,
-    this.cameraResolution = ResolutionPreset.medium,
+    this.cameraResolution = ResolutionPreset.max,
     this.showGallery = true,
     this.showOpenGalleryButton = true,
   }) : assert(
@@ -43,6 +46,8 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
       cameraResolution: widget.cameraResolution,
     );
     WidgetsBinding.instance.addObserver(this);
+
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
   }
 
   @override
@@ -64,6 +69,7 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
   void dispose() {
     controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
+    SystemChrome.restoreSystemUIOverlays();
     super.dispose();
   }
 
@@ -86,67 +92,55 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
             },
             child: Scaffold(
               backgroundColor: Colors.black,
-              body: Stack(
-                children: [
-                  Center(
-                    child: ValueListenableBuilder<CameraController?>(
+              body: RepaintBoundary(
+                key: controller.cameraPreviewGlobalKey,
+                child: Stack(
+                  children: [
+                    ValueListenableBuilder<CameraController?>(
                         valueListenable: controller.controller,
                         builder: (context, val, _) {
-                          if (val == null || !val.value.isInitialized) {
+                          if (val == null ||
+                              !val.value.isInitialized ||
+                              val.value.hasError) {
                             return const SizedBox.shrink();
                           }
-                          final size = MediaQuery.of(context).size;
-                          return SizedBox.fromSize(
-                            size: size,
-                            child: CameraPreview(val),
-                          );
+
+                          // return Positioned.fill(child: CameraPreview(val));
+                          return Positioned.fill(child: CameraPreview(val));
                         }),
-                  ),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: BottomPanel(
-                      showGallery: widget.showGallery,
-                      showOpenGalleryButton: widget.showOpenGalleryButton,
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: BottomPanel(
+                        showGallery: widget.showGallery,
+                        showOpenGalleryButton: widget.showOpenGalleryButton,
+                      ),
                     ),
-                  ),
-                  SafeArea(
-                    child: Align(
-                        alignment: Alignment.topCenter,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            IconButton(
-                              onPressed: Navigator.of(context).pop,
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                color: Colors.white,
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: controller.toggleFlash,
-                              icon: ValueListenableBuilder<bool>(
-                                valueListenable: controller.isFlashOn,
-                                builder: (_, val, child) {
-                                  if (val) {
-                                    return const Icon(
-                                      Icons.flash_on,
-                                      size: 30,
-                                      color: Colors.white,
-                                    );
-                                  }
-                                  return child!;
-                                },
-                                child: const Icon(
-                                  Icons.flash_off,
-                                  size: 30,
-                                  color: Colors.white,
+                    SafeArea(
+                      child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: SizedBox.square(
+                              dimension: 48,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color:
+                                      const Color(0xFF333333).withOpacity(.34),
+                                ),
+                                child: IconButton(
+                                  onPressed: Navigator.of(context).pop,
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
-                          ],
-                        )),
-                  ),
-                ],
+                          )),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -194,9 +188,8 @@ class BottomPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = InheritedCameraController.of(context);
 
-    return Container(
+    return SizedBox(
       width: MediaQuery.of(context).size.width,
-      color: Colors.transparent,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
@@ -230,73 +223,101 @@ class BottomPanel extends StatelessWidget {
               ),
             ),
 
-          //Buttons panel
-          SizedBox(
-            height: 80,
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                crossAxisAlignment: CrossAxisAlignment.center,
+          DecoratedBox(
+            decoration:
+                BoxDecoration(color: const Color(0xFF333333).withOpacity(.34)),
+            child: SizedBox(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: (!kIsWeb && showOpenGalleryButton)
-                        ? SizedBox(
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 8),
+                    child: ValueListenableBuilder<int?>(
+                      valueListenable: controller.timeInSeconds,
+                      builder: (c, val, _) {
+                        if (val == null) {
+                          return const Text(
+                            "Hold for video, tap for photo",
+                            style: TextStyle(color: Colors.white),
+                          );
+                        }
+
+                        return Text(
+                          controller.time,
+                          style: const TextStyle(color: troveAccent),
+                        );
+                      },
+                    ),
+                  ),
+
+                  //Buttons panel
+                  Padding(
+                    padding: const EdgeInsets.only(
+                        right: 8.0, left: 8.0, top: 8.0, bottom: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        //FLASH button
+                        Expanded(
+                          child: IconButton(
+                            onPressed: controller.toggleFlash,
+                            icon: ValueListenableBuilder<bool>(
+                              valueListenable: controller.isFlashOn,
+                              builder: (_, val, child) {
+                                if (val) {
+                                  return const Icon(
+                                    Icons.flash_on,
+                                    size: 30,
+                                    color: Colors.white,
+                                  );
+                                }
+                                return child!;
+                              },
+                              child: const Icon(
+                                Icons.flash_off,
+                                size: 30,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        //Main action button
+                        const Expanded(child: ActionButton()),
+
+                        //Switch camera button
+                        Expanded(
+                          child:
+                              ValueListenableBuilder<List<CameraDescription>>(
+                            valueListenable: controller.cameras,
+                            builder: (_, value, child) {
+                              if (kIsWeb || value.length < 2) {
+                                return const SizedBox.shrink();
+                              }
+
+                              return child!;
+                            },
                             child: DecoratedBox(
                               decoration: const BoxDecoration(
                                 color: Colors.black26,
                                 shape: BoxShape.circle,
                               ),
                               child: IconButton(
-                                onPressed: controller.pickFiles,
+                                onPressed: controller.switchCamera,
                                 icon: const Icon(
-                                  Icons.image,
+                                  CupertinoIcons.camera_rotate_fill,
                                   size: 30,
                                   color: Colors.white,
                                 ),
                               ),
                             ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                  const Expanded(child: ActionButton()),
-                  Expanded(
-                    child: ValueListenableBuilder<List<CameraDescription>>(
-                      valueListenable: controller.cameras,
-                      builder: (_, value, child) {
-                        if (kIsWeb || value.length < 2) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return child!;
-                      },
-                      child: DecoratedBox(
-                        decoration: const BoxDecoration(
-                          color: Colors.black26,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          onPressed: controller.switchCamera,
-                          icon: const Icon(
-                            Icons.cameraswitch,
-                            size: 30,
-                            color: Colors.white,
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8.0),
-            child: Text(
-              "Hold for video, tap for photo",
-              style: TextStyle(color: Colors.white),
             ),
           ),
         ],
@@ -369,9 +390,9 @@ class _ActionButtonState extends State<ActionButton>
       onTap: () async {
         animationController.duration = const Duration(milliseconds: 300);
         animationController.forward();
-        await controller.takePicture();
+        await controller.takePicture(MediaQuery.of(context).size);
 
-        if (mounted) {
+        if (mounted && !controller.isTakingPicture) {
           final files = controller.results.values.map((e) => e).toList();
           Navigator.of(context).pop(files);
         }

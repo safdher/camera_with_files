@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:camera_with_files/camera_with_files.dart';
 import 'package:example/video_player.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,9 +37,23 @@ class _HomePageState extends State<HomePage> {
   List<File> files = [];
 
   @override
+  void initState() {
+    super.initState();
+    restoreUIBars();
+  }
+
+  void restoreUIBars() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: [
+      SystemUiOverlay.top,
+      SystemUiOverlay.bottom,
+    ]);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Center(
         child: SingleChildScrollView(
           child: Column(
@@ -56,7 +71,10 @@ class _HomePageState extends State<HomePage> {
                     );
                   }
 
-                  return Image.file(e);
+                  return SizedBox.fromSize(
+                    size: size,
+                    child: Image.file(e, fit: BoxFit.cover),
+                  );
                 }).toList(),
               TextButton(
                 onPressed: () async {
@@ -64,13 +82,14 @@ class _HomePageState extends State<HomePage> {
                   var data = await Navigator.of(context).push(
                     MaterialPageRoute<List<File>>(
                       builder: (_) => const CameraApp(
-                        compressionQuality: .5,
+                        compressionQuality: 1.0,
                         isMultipleSelection: false,
-                        // showGallery: false,
-                        // showOpenGalleryButton: false,
+                        showGallery: false,
+                        showOpenGalleryButton: false,
                       ),
                     ),
                   );
+                  restoreUIBars();
 
                   if (data != null) {
                     setState(() {

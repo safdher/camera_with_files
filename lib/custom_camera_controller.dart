@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -5,6 +6,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -73,9 +75,52 @@ class CustomCameraController extends ChangeNotifier {
   VideoPlayerController? videoController;
   VoidCallback? videoPlayerListener;
   File? videoFile;
-  final duration = ValueNotifier(Duration.zero);
-
   final imagesCarouselController = ScrollController();
+
+  //
+  //Pictures related
+  final cameraPreviewGlobalKey = GlobalKey();
+
+  //Video Duration Related
+  //
+  //Trigger the UI update
+  final timeInSeconds = ValueNotifier<int?>(null);
+  int currentTimeInMilliseconds = 0;
+  static const timerIntervalInMilliseconds = 17;
+  bool cancelTimer = false;
+  Timer? timer;
+
+  late String documentsDirectoryPath;
+
+  Future<void> init() async {
+    cameras.value = await availableCameras();
+
+    await setNewCamera();
+
+    if (await _requestPermissions()) {
+      _loadImages();
+    }
+
+    imagesCarouselController.addListener(() {
+      if (imagesCarouselController.position.atEdge) {
+        bool isTop = imagesCarouselController.position.pixels == 0;
+        if (!isTop) {
+          if (imageMedium.value.length > (pageCount * pageIndex)) {
+            pageIndex++;
+
+            if (pageCount * (pageIndex) > imageMedium.value.length) {
+              count.value = imageMedium.value.length;
+            } else {
+              count.value = pageCount * pageIndex;
+            }
+          }
+        }
+      }
+    });
+
+    getApplicationDocumentsDirectory()
+        .then((value) => documentsDirectoryPath = value.path);
+  }
 
   @override
   void dispose() {
@@ -94,8 +139,14 @@ class CustomCameraController extends ChangeNotifier {
 
     imagesCarouselController.dispose();
 
+    //Duration Timer related
+    timeInSeconds.dispose();
+    timer?.cancel();
+
     super.dispose();
   }
+
+  bool get isTakingPicture => controller.value?.value.isTakingPicture == true;
 
   void updatedLifecycle(AppLifecycleState state) {
     final CameraController? cameraController = controller.value;
@@ -191,33 +242,6 @@ class CustomCameraController extends ChangeNotifier {
     debugPrint("========\n$message");
   }
 
-  Future<void> init() async {
-    cameras.value = await availableCameras();
-
-    await setNewCamera();
-
-    if (await _requestPermissions()) {
-      _loadImages();
-    }
-
-    imagesCarouselController.addListener(() {
-      if (imagesCarouselController.position.atEdge) {
-        bool isTop = imagesCarouselController.position.pixels == 0;
-        if (!isTop) {
-          if (imageMedium.value.length > (pageCount * pageIndex)) {
-            pageIndex++;
-
-            if (pageCount * (pageIndex) > imageMedium.value.length) {
-              count.value = imageMedium.value.length;
-            } else {
-              count.value = pageCount * pageIndex;
-            }
-          }
-        }
-      }
-    });
-  }
-
   Future<void> setNewCamera([int camIndex = 0]) async {
     final oldController = controller.value;
 
@@ -272,24 +296,55 @@ class CustomCameraController extends ChangeNotifier {
     return false;
   }
 
-  Future<void> takePicture() async {
-    if (controller.value == null) return;
+  Future<void> takePicture(Size size) async {
+    if (controller.value == null || controller.value!.value.isTakingPicture) {
+      return;
+    }
 
     XFile xfile = await controller.value!.takePicture();
-    File file = File(xfile.path);
+
     if (!kIsWeb) {
-      await compressImages([file]);
+      File file = File(xfile.path);
+
       file = results[file.path] ?? file;
 
-      Uint8List dataFile = await file.readAsBytes();
-      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+      var originalImg = img.decodeImage(file.readAsBytesSync());
 
-      await ImageGallerySaver.saveImage(
-        dataFile,
-        quality: 100,
-        name: "$fileName.jpg",
-        isReturnImagePathOfIOS: true,
-      );
+      if (originalImg != null) {
+        final deviceAspectRatio = size.aspectRatio;
+        final originalImgAspectRatio = originalImg.width / originalImg.height;
+
+        late final img.Image? resizedImage;
+        if (originalImgAspectRatio > deviceAspectRatio) {
+          final newWidth = (deviceAspectRatio * originalImg.height).toInt();
+
+          resizedImage = img.copyResize(
+            originalImg,
+            width: newWidth,
+            height: originalImg.height,
+          );
+        } else {
+          final newHeight = (deviceAspectRatio * originalImg.width).toInt();
+
+          resizedImage = img.copyResize(originalImg,
+              width: originalImg.width, height: newHeight);
+        }
+
+        String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+
+        final r = File('$documentsDirectoryPath/tmp.jpg')
+          ..create()
+          ..writeAsBytesSync(img.encodeJpg(resizedImage));
+
+        await ImageGallerySaver.saveImage(
+          r.readAsBytesSync(),
+          quality: 100,
+          name: "$fileName-------.jpg",
+          isReturnImagePathOfIOS: true,
+        );
+
+        results.putIfAbsent(r.path, () => r);
+      }
     }
     _loadImages();
   }
@@ -305,15 +360,13 @@ class CustomCameraController extends ChangeNotifier {
   }
 
   void toggleFlash() {
-    isFlashOn.value = !isFlashOn.value;
-
-    if (controller.value == null) return;
-
     if (isFlashOn.value) {
-      controller.value!.setFlashMode(FlashMode.torch);
-    } else {
       controller.value!.setFlashMode(FlashMode.off);
+    } else {
+      controller.value!.setFlashMode(FlashMode.always);
     }
+
+    isFlashOn.value = controller.value!.value.flashMode != FlashMode.off;
   }
 
   void pickFiles() async {
@@ -405,6 +458,7 @@ class CustomCameraController extends ChangeNotifier {
 
     try {
       await cameraController.startVideoRecording();
+      _startDurationTimer();
     } on CameraException catch (e) {
       _showCameraException(e);
       return;
@@ -413,6 +467,7 @@ class CustomCameraController extends ChangeNotifier {
 
   Future<void> stopVideoRecording() async {
     final result = await _stopVideoRecording();
+    _stopDurationTimer();
 
     if (result != null) {
       String fileName = DateTime.now().millisecondsSinceEpoch.toString();
@@ -476,5 +531,45 @@ class CustomCameraController extends ChangeNotifier {
   void _showCameraException(CameraException e) {
     debugPrint(e.code);
     debugPrint(e.description);
+  }
+
+  /// Returns the String representation of the video duration.
+  String get time {
+    if (timeInSeconds.value == null) return "";
+
+    final int minutes = (timeInSeconds.value! ~/ 60);
+    final int seconds = (timeInSeconds.value! - 60 * minutes);
+
+    String result = minutes.toString().padLeft(2, "0");
+    result += ":";
+    result += seconds.toString().padLeft(2, "0");
+    return result;
+  }
+
+  void _startDurationTimer() {
+    if (timer != null) return;
+
+    timer = Timer.periodic(
+        const Duration(milliseconds: timerIntervalInMilliseconds), (t) {
+      if (cancelTimer) {
+        t.cancel();
+        timer = null;
+      } else {
+        currentTimeInMilliseconds += timerIntervalInMilliseconds;
+        final currentTimeInSeconds = currentTimeInMilliseconds ~/ 1000;
+
+        if (timeInSeconds.value == null ||
+            currentTimeInSeconds > timeInSeconds.value!) {
+          timeInSeconds.value = currentTimeInSeconds;
+        }
+      }
+    });
+  }
+
+  void _stopDurationTimer() {
+    cancelTimer = true;
+    timer?.cancel();
+    timer = null;
+    timeInSeconds.value = null;
   }
 }
