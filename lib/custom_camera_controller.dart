@@ -40,7 +40,8 @@ class CustomCameraController extends ChangeNotifier {
   CustomCameraController({
     bool isMultipleSelection = false,
     double compressionQuality = 1,
-    this.cameraResolution = ResolutionPreset.medium,
+    this.cameraResolution = ResolutionPreset.max,
+    this.isFullScreen = false,
   }) {
     assert(
       compressionQuality > 0 && compressionQuality <= 1,
@@ -48,6 +49,8 @@ class CustomCameraController extends ChangeNotifier {
     );
     this.compressionQuality = (compressionQuality * 100).toInt();
     this.isMultipleSelection.value = isMultipleSelection;
+
+    _init();
   }
 
   final isMultipleSelection = ValueNotifier(false);
@@ -72,17 +75,16 @@ class CustomCameraController extends ChangeNotifier {
   int pageCount = 10;
   final ResolutionPreset cameraResolution;
 
+  final imagesCarouselController = ScrollController();
+
+  final bool isFullScreen;
+
+  //Video related
   VideoPlayerController? videoController;
   VoidCallback? videoPlayerListener;
   File? videoFile;
-  final imagesCarouselController = ScrollController();
-
-  //
-  //Pictures related
-  final cameraPreviewGlobalKey = GlobalKey();
 
   //Video Duration Related
-  //
   //Trigger the UI update
   final timeInSeconds = ValueNotifier<int?>(null);
   int currentTimeInMilliseconds = 0;
@@ -90,18 +92,24 @@ class CustomCameraController extends ChangeNotifier {
   bool cancelTimer = false;
   Timer? timer;
 
+  //Storage related
   late String documentsDirectoryPath;
 
-  Future<void> init() async {
+  //Permission related
+  bool isAskingPermission = false;
+
+  Future<void> _init() async {
+    if (!await _requestPermissions()) return;
+
     cameras.value = await availableCameras();
 
-    await setNewCamera();
+    _loadImages();
 
-    if (await _requestPermissions()) {
-      _loadImages();
-    }
+    await updateSelectedCamera();
 
     imagesCarouselController.addListener(() {
+      if (!imagesCarouselController.hasClients) return;
+
       if (imagesCarouselController.position.atEdge) {
         bool isTop = imagesCarouselController.position.pixels == 0;
         if (!isTop) {
@@ -148,29 +156,25 @@ class CustomCameraController extends ChangeNotifier {
 
   bool get isTakingPicture => controller.value?.value.isTakingPicture == true;
 
-  void updatedLifecycle(AppLifecycleState state) {
-    final CameraController? cameraController = controller.value;
+  void updatedLifecycle(AppLifecycleState state) async {
+    final CameraController? oldController = controller.value;
 
     // App state changed before we got the chance to initialize.
-    if (cameraController == null || !cameraController.value.isInitialized) {
+    if (oldController != null && !oldController.value.isInitialized) {
       return;
     }
 
+    if (isAskingPermission) return;
+
     switch (state) {
       case AppLifecycleState.inactive:
-        cameraController.dispose();
-        break;
       case AppLifecycleState.paused:
-        if (cameraController.value.isRecordingVideo) {
-          pauseVideoRecording();
-        }
+        controller.value = null;
+        await oldController?.dispose();
         break;
 
       case AppLifecycleState.resumed:
-        if (cameraController.value.isRecordingPaused) {
-          resumeVideoRecording();
-        }
-        onNewCameraSelected(cameraController.description);
+        updateSelectedCamera(cameraDescription: oldController?.description);
         break;
 
       default:
@@ -178,16 +182,27 @@ class CustomCameraController extends ChangeNotifier {
     }
   }
 
-  Future<void> onNewCameraSelected(CameraDescription cameraDescription) async {
+  Future<void> updateSelectedCamera(
+      {CameraDescription? cameraDescription}) async {
     final CameraController? oldController = controller.value;
     controller.value = null;
     await oldController?.dispose();
 
-    final cameraController = CameraController(
-      cameraDescription,
-      cameraResolution,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
+    late final CameraController cameraController;
+
+    if (cameraDescription != null) {
+      cameraController = CameraController(
+        cameraDescription,
+        cameraResolution,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+    } else {
+      cameraController = CameraController(
+        cameras.value[camIndex],
+        imageFormatGroup: ImageFormatGroup.jpeg,
+        cameraResolution,
+      );
+    }
 
     // If the controller is updated then update the UI.
     cameraController.addListener(() {
@@ -242,25 +257,6 @@ class CustomCameraController extends ChangeNotifier {
     debugPrint("========\n$message");
   }
 
-  Future<void> setNewCamera([int camIndex = 0]) async {
-    final oldController = controller.value;
-
-    if (oldController != null) {
-      controller.value = null;
-      //Releases the previous camera driver
-      await oldController.dispose();
-    }
-
-    final tmp = CameraController(
-      cameras.value[camIndex],
-      cameraResolution,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
-
-    await tmp.initialize();
-    controller.value = tmp;
-  }
-
   void _loadImages() async {
     if (kIsWeb) {
       return;
@@ -282,21 +278,34 @@ class CustomCameraController extends ChangeNotifier {
   }
 
   Future<bool> _requestPermissions() async {
-    if (kIsWeb) {
-      return true;
-    } else if (Platform.isIOS) {
-      final status = await Permission.storage.request();
-      final status2 = await Permission.photos.request();
-      final status3 = await Permission.mediaLibrary.request();
-      return status.isGranted && status2.isGranted && status3.isGranted;
-    } else if (Platform.isAndroid) {
-      final status = await Permission.storage.request();
-      return status.isGranted;
+    if (kIsWeb) return false;
+    isAskingPermission = true;
+
+    try {
+      final p = await Permission.storage.request();
+      final p2 = await Permission.photos.request();
+      final p3 = await Permission.mediaLibrary.request();
+      final p4 = await Permission.camera.request();
+      final p5 = await Permission.microphone.request();
+      final p6 = await Permission.speech.request();
+
+      isAskingPermission = false;
+
+      return p.isGranted &&
+          p2.isGranted &&
+          p3.isGranted &&
+          p4.isGranted &&
+          p5.isGranted &&
+          p6.isGranted;
+    } catch (e) {
+      debugPrint("Error asking permission");
+      debugPrint(e.toString());
     }
+
     return false;
   }
 
-  Future<void> takePicture(Size size) async {
+  Future<void> takePicture(double deviceAspectRatio) async {
     if (controller.value == null || controller.value!.value.isTakingPicture) {
       return;
     }
@@ -304,49 +313,95 @@ class CustomCameraController extends ChangeNotifier {
     XFile xfile = await controller.value!.takePicture();
 
     if (!kIsWeb) {
-      File file = File(xfile.path);
+      final c = await _processImage(xfile, deviceAspectRatio);
 
-      file = results[file.path] ?? file;
-
-      var originalImg = img.decodeImage(file.readAsBytesSync());
-
-      if (originalImg != null) {
-        final deviceAspectRatio = size.aspectRatio;
-        final originalImgAspectRatio = originalImg.width / originalImg.height;
-
-        late final img.Image? resizedImage;
-        if (originalImgAspectRatio > deviceAspectRatio) {
-          final newWidth = (deviceAspectRatio * originalImg.height).toInt();
-
-          resizedImage = img.copyResize(
-            originalImg,
-            width: newWidth,
-            height: originalImg.height,
-          );
-        } else {
-          final newHeight = (deviceAspectRatio * originalImg.width).toInt();
-
-          resizedImage = img.copyResize(originalImg,
-              width: originalImg.width, height: newHeight);
-        }
-
-        String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-
-        final r = File('$documentsDirectoryPath/tmp.jpg')
-          ..create()
-          ..writeAsBytesSync(img.encodeJpg(resizedImage));
-
-        await ImageGallerySaver.saveImage(
-          r.readAsBytesSync(),
-          quality: 100,
-          name: "$fileName-------.jpg",
-          isReturnImagePathOfIOS: true,
-        );
-
-        results.putIfAbsent(r.path, () => r);
+      if (c == null) {
+        //TODO: show error message here.
+        return;
       }
+
+      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+
+      await ImageGallerySaver.saveImage(
+        await c.readAsBytes(),
+        quality: 100,
+        name: "$fileName.jpg",
+        isReturnImagePathOfIOS: true,
+      );
+      results.putIfAbsent(c.path, () => File(c.path));
+
+      _loadImages();
     }
-    _loadImages();
+  }
+
+  /// This process is required to store full screen images and to avoid the
+  /// rotated picture error on store new image.
+  Future<File?> _processImage(XFile xfile, double deviceAspectRatio) async {
+    File file = File(xfile.path);
+
+    img.Image? processedImage;
+
+    if (isFullScreen) {
+      var originalImg = img.decodeJpg(await file.readAsBytes());
+
+      if (originalImg == null) return null;
+
+      final originalImgAspectRatio = originalImg.width / originalImg.height;
+
+      if (originalImgAspectRatio > deviceAspectRatio) {
+        //Imagem capturada é mais larga que o viewport.
+        //Manter altura e cortar largura
+        final newWidthScale =
+            (deviceAspectRatio * originalImg.height) / originalImg.width;
+
+        final newWidth = originalImg.width * newWidthScale;
+
+        final cropSize = originalImg.width - newWidth;
+
+        processedImage = img.copyCrop(
+          originalImg,
+          cropSize ~/ 2,
+          0,
+          newWidth.toInt(),
+          originalImg.height,
+        );
+      } else {
+        //Imagem capturada é mais comprida que o viewport.
+        //Manter largura e cortar altura
+        final newHeightScale =
+            (originalImg.width / deviceAspectRatio) / originalImg.height;
+
+        final newHeight = originalImg.height * newHeightScale;
+
+        final cropSize = originalImg.height - newHeight;
+
+        processedImage = img.copyCrop(
+          originalImg,
+          0,
+          cropSize ~/ 2,
+          originalImg.width,
+          newHeight.toInt(),
+        );
+      }
+      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+      final r = File('$documentsDirectoryPath/$fileName.jpg')
+        ..create()
+        ..writeAsBytesSync(img.encodeJpg(processedImage));
+      file = results[file.path] ?? r;
+      return r;
+    } else {
+      final processedImage = img.decodeJpg(file.readAsBytesSync().toList());
+
+      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+      final r = File('$documentsDirectoryPath/$fileName.jpg')
+        ..create()
+        ..writeAsBytesSync(
+          img.encodeJpg(processedImage!),
+        );
+      file = results[file.path] ?? r;
+
+      return r;
+    }
   }
 
   void switchCamera() {
@@ -356,7 +411,7 @@ class CustomCameraController extends ChangeNotifier {
       camIndex++;
     }
 
-    setNewCamera(camIndex);
+    updateSelectedCamera();
   }
 
   void toggleFlash() {

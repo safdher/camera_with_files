@@ -19,6 +19,7 @@ class CameraApp extends StatefulWidget {
     this.cameraResolution = ResolutionPreset.max,
     this.showGallery = true,
     this.showOpenGalleryButton = true,
+    this.isFullScreen = true,
   }) : assert(
           compressionQuality > 0 && compressionQuality <= 1,
           "compressionQuality value must be bettwen 0 (exclusive) and 1 (inclusive)",
@@ -29,6 +30,7 @@ class CameraApp extends StatefulWidget {
   final ResolutionPreset cameraResolution;
   final bool showGallery;
   final bool showOpenGalleryButton;
+  final bool isFullScreen;
 
   @override
   State<CameraApp> createState() => _CameraAppState();
@@ -44,16 +46,19 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
       compressionQuality: widget.compressionQuality,
       isMultipleSelection: widget.isMultipleSelection,
       cameraResolution: widget.cameraResolution,
+      isFullScreen: widget.isFullScreen,
     );
     WidgetsBinding.instance.addObserver(this);
+  }
 
+  void updateSystemUI() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    controller.init();
+
     if (widget.showGallery) {
       precacheImage(
         const AssetImage(
@@ -76,6 +81,26 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     controller.updatedLifecycle(state);
+    updateSystemUI();
+  }
+
+  /// Returns the current device Aspect Ratio accordingly to the camera AspectRatio
+  double deviceAR(BuildContext context) {
+    final deviceSize = MediaQuery.of(context).size;
+
+    late double deviceAR;
+
+    switch (MediaQuery.of(context).orientation) {
+      case Orientation.landscape:
+        deviceAR = deviceSize.aspectRatio;
+        break;
+
+      case Orientation.portrait:
+        deviceAR = 1 / deviceSize.aspectRatio;
+        break;
+    }
+
+    return deviceAR;
   }
 
   @override
@@ -91,56 +116,33 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
               return Future.value(true);
             },
             child: Scaffold(
-              backgroundColor: Colors.black,
-              body: RepaintBoundary(
-                key: controller.cameraPreviewGlobalKey,
-                child: Stack(
-                  children: [
-                    ValueListenableBuilder<CameraController?>(
-                        valueListenable: controller.controller,
-                        builder: (context, val, _) {
-                          if (val == null ||
-                              !val.value.isInitialized ||
-                              val.value.hasError) {
-                            return const SizedBox.shrink();
-                          }
+              backgroundColor: const Color(0xFF8b8b8b),
+              body: Stack(
+                children: [
+                  ValueListenableBuilder<CameraController?>(
+                      valueListenable: controller.controller,
+                      builder: (context, val, _) {
+                        if (val == null ||
+                            !val.value.isInitialized ||
+                            val.value.hasError) {
+                          return const SizedBox.shrink();
+                        }
 
-                          // return Positioned.fill(child: CameraPreview(val));
-                          return Positioned.fill(child: CameraPreview(val));
-                        }),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: BottomPanel(
-                        showGallery: widget.showGallery,
-                        showOpenGalleryButton: widget.showOpenGalleryButton,
-                      ),
-                    ),
-                    SafeArea(
-                      child: Align(
-                          alignment: Alignment.topLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: SizedBox.square(
-                              dimension: 48,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color:
-                                      const Color(0xFF333333).withOpacity(.34),
-                                ),
-                                child: IconButton(
-                                  onPressed: Navigator.of(context).pop,
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )),
-                    ),
-                  ],
-                ),
+                        if (!widget.isFullScreen) {
+                          return Center(child: CameraPreview(val));
+                        }
+
+                        final scale = deviceAR(context) / val.value.aspectRatio;
+
+                        return Transform.scale(
+                          scale: scale,
+                          child: Center(child: CameraPreview(val)),
+                        );
+                      }),
+                  widget.isFullScreen
+                      ? const FullScreenUI()
+                      : const CroppedScreenUI()
+                ],
               ),
             ),
           );
@@ -150,35 +152,64 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
   }
 }
 
-class ExpandPicturesPanelButton extends StatelessWidget {
-  const ExpandPicturesPanelButton({Key? key}) : super(key: key);
+class CroppedScreenUI extends StatelessWidget {
+  const CroppedScreenUI({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final controller = InheritedCameraController.of(context);
-
-    return GestureDetector(
-      onTap: () async {
-        controller.isExpandedPicturesPanel.value = true;
-      },
-      child: Container(
-        color: Colors.transparent,
-        height: 48,
-        width: MediaQuery.of(context).size.width,
-        child: const Icon(
-          Icons.arrow_drop_up_outlined,
-          color: Colors.white,
+    return Stack(
+      children: [
+        const Align(
+          alignment: Alignment.bottomCenter,
+          child: CroppedScreenBottomPanel(),
         ),
-      ),
+        SafeArea(
+          child: Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                height: 48,
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox.square(
+                            dimension: 48,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              onPressed: Navigator.of(context).pop,
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Expanded(
+                        child: SizedBox(
+                          height: 48,
+                          child: Center(child: DurationCounter()),
+                        ),
+                      ),
+                      const Expanded(child: Center(child: SizedBox.shrink())),
+                    ],
+                  ),
+                ),
+              )),
+        ),
+      ],
     );
   }
 }
 
-class BottomPanel extends StatelessWidget {
-  const BottomPanel({
+class CroppedScreenBottomPanel extends StatelessWidget {
+  const CroppedScreenBottomPanel({
     Key? key,
-    required this.showGallery,
-    required this.showOpenGalleryButton,
+    this.showGallery = false,
+    this.showOpenGalleryButton = false,
   }) : super(key: key);
 
   final bool showGallery;
@@ -194,34 +225,7 @@ class BottomPanel extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           //Photographs gallery
-          if (showGallery)
-            SizedBox(
-              height: 130,
-              child: Stack(
-                children: [
-                  Column(
-                    children: [
-                      ValueListenableBuilder<bool>(
-                        valueListenable: controller.isExpandedPicturesPanel,
-                        builder: (context, isExpanded, child) {
-                          if (isExpanded && !Platform.isIOS) {
-                            return const SizedBox(height: 48);
-                          }
-                          return child!;
-                        },
-                        child: const ExpandPicturesPanelButton(),
-                      ),
-                      if (!kIsWeb) const ImagesCarousel(),
-                    ],
-                  ),
-                  const Positioned(
-                    top: 20,
-                    right: 0,
-                    child: BadgeButton(),
-                  ),
-                ],
-              ),
-            ),
+          if (showGallery) const Gallery(),
 
           DecoratedBox(
             decoration:
@@ -229,30 +233,10 @@ class BottomPanel extends StatelessWidget {
             child: SizedBox(
               child: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16, bottom: 8),
-                    child: ValueListenableBuilder<int?>(
-                      valueListenable: controller.timeInSeconds,
-                      builder: (c, val, _) {
-                        if (val == null) {
-                          return const Text(
-                            "Hold for video, tap for photo",
-                            style: TextStyle(color: Colors.white),
-                          );
-                        }
-
-                        return Text(
-                          controller.time,
-                          style: const TextStyle(color: troveAccent),
-                        );
-                      },
-                    ),
-                  ),
-
                   //Buttons panel
                   Padding(
                     padding: const EdgeInsets.only(
-                        right: 8.0, left: 8.0, top: 8.0, bottom: 16),
+                        right: 8.0, left: 8.0, top: 12.0, bottom: 8),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -297,18 +281,173 @@ class BottomPanel extends StatelessWidget {
 
                               return child!;
                             },
-                            child: DecoratedBox(
-                              decoration: const BoxDecoration(
-                                color: Colors.black26,
-                                shape: BoxShape.circle,
+                            child: IconButton(
+                              onPressed: controller.switchCamera,
+                              icon: const Icon(
+                                CupertinoIcons.camera_rotate_fill,
+                                size: 30,
+                                color: Colors.white,
                               ),
-                              child: IconButton(
-                                onPressed: controller.switchCamera,
-                                icon: const Icon(
-                                  CupertinoIcons.camera_rotate_fill,
-                                  size: 30,
-                                  color: Colors.white,
-                                ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 16),
+                    child: SizedBox(
+                      height: 18,
+                      child: ValueListenableBuilder<int?>(
+                        valueListenable: controller.timeInSeconds,
+                        builder: (c, val, _) {
+                          if (val == null) {
+                            return const Text(
+                              "Tap for photo, hold for video",
+                              style: TextStyle(color: Colors.white),
+                            );
+                          }
+
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class FullScreenUI extends StatelessWidget {
+  const FullScreenUI({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        const Align(
+          alignment: Alignment.bottomCenter,
+          child: FullScreenBottomPanel(),
+        ),
+        SafeArea(
+          child: Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: SizedBox.square(
+                  dimension: 48,
+                  child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF333333).withOpacity(.34),
+                      ),
+                      child: IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      )),
+                ),
+              )),
+        ),
+      ],
+    );
+  }
+}
+
+class FullScreenBottomPanel extends StatelessWidget {
+  const FullScreenBottomPanel({
+    Key? key,
+    this.showGallery = false,
+    this.showOpenGalleryButton = false,
+  }) : super(key: key);
+
+  final bool showGallery;
+  final bool showOpenGalleryButton;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = InheritedCameraController.of(context);
+
+    return SizedBox(
+      width: MediaQuery.of(context).size.width,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          //Photographs gallery
+          if (showGallery) const Gallery(),
+
+          DecoratedBox(
+            decoration:
+                BoxDecoration(color: const Color(0xFF333333).withOpacity(.34)),
+            child: SizedBox(
+              child: Column(
+                children: [
+                  const DurationCounter(label: "Tap for photo, hold for video"),
+
+                  //Buttons panel
+                  Padding(
+                    padding: const EdgeInsets.only(
+                        right: 8.0, left: 8.0, top: 4.0, bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        //FLASH button
+                        Expanded(
+                          child: IconButton(
+                            onPressed: controller.toggleFlash,
+                            icon: ValueListenableBuilder<bool>(
+                              valueListenable: controller.isFlashOn,
+                              builder: (_, val, child) {
+                                if (val) {
+                                  return const Icon(
+                                    Icons.flash_on,
+                                    size: 30,
+                                    color: Colors.white,
+                                  );
+                                }
+                                return child!;
+                              },
+                              child: const Icon(
+                                Icons.flash_off,
+                                size: 30,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        //Main action button
+                        const Expanded(child: ActionButton()),
+
+                        //Switch camera button
+                        Expanded(
+                          child:
+                              ValueListenableBuilder<List<CameraDescription>>(
+                            valueListenable: controller.cameras,
+                            builder: (_, value, child) {
+                              if (kIsWeb || value.length < 2) {
+                                return const SizedBox.shrink();
+                              }
+
+                              return child!;
+                            },
+                            child: IconButton(
+                              onPressed: controller.switchCamera,
+                              icon: const Icon(
+                                CupertinoIcons.camera_rotate_fill,
+                                size: 30,
+                                color: Colors.white,
                               ),
                             ),
                           ),
@@ -321,6 +460,96 @@ class BottomPanel extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class DurationCounter extends StatelessWidget {
+  const DurationCounter({Key? key, this.label}) : super(key: key);
+
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = InheritedCameraController.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 6),
+      child: ValueListenableBuilder<int?>(
+        valueListenable: controller.timeInSeconds,
+        builder: (c, val, _) {
+          if (val == null) {
+            return Text(
+              label ?? "",
+              style: const TextStyle(color: Colors.white, fontSize: 18),
+            );
+          }
+
+          return Text(
+            controller.time,
+            style: const TextStyle(color: troveAccent, fontSize: 18),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class Gallery extends StatelessWidget {
+  const Gallery({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = InheritedCameraController.of(context);
+    return SizedBox(
+      height: 130,
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              ValueListenableBuilder<bool>(
+                valueListenable: controller.isExpandedPicturesPanel,
+                builder: (context, isExpanded, child) {
+                  if (isExpanded && !Platform.isIOS) {
+                    return const SizedBox(height: 48);
+                  }
+                  return child!;
+                },
+                child: const ExpandPicturesPanelButton(),
+              ),
+              if (!kIsWeb) const ImagesCarousel(),
+            ],
+          ),
+          const Positioned(
+            top: 20,
+            right: 0,
+            child: BadgeButton(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ExpandPicturesPanelButton extends StatelessWidget {
+  const ExpandPicturesPanelButton({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = InheritedCameraController.of(context);
+
+    return GestureDetector(
+      onTap: () async {
+        controller.isExpandedPicturesPanel.value = true;
+      },
+      child: Container(
+        color: Colors.transparent,
+        height: 48,
+        width: MediaQuery.of(context).size.width,
+        child: const Icon(
+          Icons.arrow_drop_up_outlined,
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -348,21 +577,19 @@ class _ActionButtonState extends State<ActionButton>
     );
 
     decorationAnimation = DecorationTween(
-      begin: BoxDecoration(
+      begin: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const RadialGradient(
-          colors: [Colors.red, Colors.transparent],
+        gradient: RadialGradient(
+          colors: [Colors.red, Colors.white],
           stops: [0, 0],
         ),
-        border: Border.all(color: Colors.white, width: 3),
       ),
-      end: BoxDecoration(
+      end: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const RadialGradient(
-          colors: [Colors.red, Colors.transparent],
+        gradient: RadialGradient(
+          colors: [Colors.red, Colors.white],
           stops: [1, 1],
         ),
-        border: Border.all(color: Colors.white, width: 3),
       ),
     ).animate(animationController);
   }
@@ -390,7 +617,7 @@ class _ActionButtonState extends State<ActionButton>
       onTap: () async {
         animationController.duration = const Duration(milliseconds: 300);
         animationController.forward();
-        await controller.takePicture(MediaQuery.of(context).size);
+        await controller.takePicture(MediaQuery.of(context).size.aspectRatio);
 
         if (mounted && !controller.isTakingPicture) {
           final files = controller.results.values.map((e) => e).toList();
@@ -404,11 +631,22 @@ class _ActionButtonState extends State<ActionButton>
       },
       onLongPressEnd: (_) => _stopVideo(controller),
       onLongPressCancel: () => _stopVideo(controller),
-      child: SizedBox.square(
-        dimension: 60,
-        child: DecoratedBoxTransition(
-          decoration: decorationAnimation,
-          child: const SizedBox.shrink(),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white, width: 2),
+          shape: BoxShape.circle,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Center(
+            child: SizedBox.square(
+              dimension: 52,
+              child: DecoratedBoxTransition(
+                decoration: decorationAnimation,
+                child: const SizedBox.shrink(),
+              ),
+            ),
+          ),
         ),
       ),
     );

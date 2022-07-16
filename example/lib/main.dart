@@ -35,6 +35,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<File> files = [];
+  bool isFullScreen = false;
 
   @override
   void initState() {
@@ -44,16 +45,37 @@ class _HomePageState extends State<HomePage> {
 
   void restoreUIBars() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: [
-      SystemUiOverlay.top,
-      SystemUiOverlay.bottom,
+      // SystemUiOverlay.top,
+      // SystemUiOverlay.bottom,
     ]);
+  }
+
+  void onTap(bool isFullScreen) async {
+    files.clear();
+    var data = await Navigator.of(context).push(
+      MaterialPageRoute<List<File>>(
+        builder: (_) => CameraApp(
+          compressionQuality: 1.0,
+          isMultipleSelection: false,
+          showGallery: false,
+          showOpenGalleryButton: false,
+          isFullScreen: isFullScreen,
+        ),
+      ),
+    );
+    restoreUIBars();
+
+    setState(() {
+      files = data ?? [];
+      this.isFullScreen = isFullScreen;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       body: Center(
         child: SingleChildScrollView(
           child: Column(
@@ -67,37 +89,32 @@ class _HomePageState extends State<HomePage> {
                         maxWidth: size.width,
                         maxHeight: size.height,
                       ),
-                      child: VideoPlayer(videoFile: e, key: ValueKey(e.path)),
+                      child: VideoPlayer(
+                        videoFile: e,
+                        key: ValueKey(e.path),
+                        isFullScreen: isFullScreen,
+                      ),
                     );
                   }
 
                   return SizedBox.fromSize(
+                    key: ValueKey(e.path),
                     size: size,
-                    child: Image.file(e, fit: BoxFit.cover),
+                    child: Image.file(e, fit: BoxFit.contain),
                   );
                 }).toList(),
-              TextButton(
-                onPressed: () async {
-                  files.clear();
-                  var data = await Navigator.of(context).push(
-                    MaterialPageRoute<List<File>>(
-                      builder: (_) => const CameraApp(
-                        compressionQuality: 1.0,
-                        isMultipleSelection: false,
-                        showGallery: false,
-                        showOpenGalleryButton: false,
-                      ),
-                    ),
-                  );
-                  restoreUIBars();
-
-                  if (data != null) {
-                    setState(() {
-                      files = data;
-                    });
-                  }
-                },
-                child: const Text("Click"),
+              // if (files.isEmpty)
+              Column(
+                children: [
+                  ElevatedButton(
+                    onPressed: () => onTap(true),
+                    child: const Text("Full screen"),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => onTap(false),
+                    child: const Text("Cropped screen"),
+                  ),
+                ],
               ),
             ],
           ),
