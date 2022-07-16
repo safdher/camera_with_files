@@ -10,6 +10,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_gallery/photo_gallery.dart';
@@ -69,7 +70,7 @@ class CustomCameraController extends ChangeNotifier {
   final cameras = ValueNotifier<List<CameraDescription>>([]);
   List<Album> imageAlbums = [];
   //Contains all the images, already compressed.
-  final results = <String, File>{};
+  File? image;
   int camIndex = 0;
   int pageIndex = 1;
   int pageCount = 10;
@@ -93,10 +94,13 @@ class CustomCameraController extends ChangeNotifier {
   Timer? timer;
 
   //Storage related
-  late String documentsDirectoryPath;
+  String? documentsDirectoryPath;
 
   //Permission related
   bool isAskingPermission = false;
+  bool hasMicrophonePermission = false;
+  final hasCameraPermission = ValueNotifier(false);
+  bool hasStoragePermission = false;
 
   Future<void> _init() async {
     if (!await _requestPermissions()) return;
@@ -126,8 +130,10 @@ class CustomCameraController extends ChangeNotifier {
       }
     });
 
-    getApplicationDocumentsDirectory()
-        .then((value) => documentsDirectoryPath = value.path);
+    if (hasStoragePermission) {
+      getApplicationDocumentsDirectory()
+          .then((value) => documentsDirectoryPath = value.path);
+    }
   }
 
   @override
@@ -160,7 +166,8 @@ class CustomCameraController extends ChangeNotifier {
     final CameraController? oldController = controller.value;
 
     // App state changed before we got the chance to initialize.
-    if (oldController != null && !oldController.value.isInitialized) {
+    if (oldController != null && !oldController.value.isInitialized ||
+        !hasCameraPermission.value) {
       return;
     }
 
@@ -195,12 +202,14 @@ class CustomCameraController extends ChangeNotifier {
         cameraDescription,
         cameraResolution,
         imageFormatGroup: ImageFormatGroup.jpeg,
+        enableAudio: hasMicrophonePermission,
       );
     } else {
       cameraController = CameraController(
         cameras.value[camIndex],
         imageFormatGroup: ImageFormatGroup.jpeg,
         cameraResolution,
+        enableAudio: hasMicrophonePermission,
       );
     }
 
@@ -258,7 +267,7 @@ class CustomCameraController extends ChangeNotifier {
   }
 
   void _loadImages() async {
-    if (kIsWeb) {
+    if (kIsWeb || !hasStoragePermission) {
       return;
     }
     imageAlbums = await PhotoGallery.listAlbums(
@@ -282,26 +291,20 @@ class CustomCameraController extends ChangeNotifier {
     isAskingPermission = true;
 
     try {
-      final p = await Permission.storage.request();
-      final p2 = await Permission.photos.request();
-      final p3 = await Permission.mediaLibrary.request();
-      final p4 = await Permission.camera.request();
-      final p5 = await Permission.microphone.request();
-      final p6 = await Permission.speech.request();
+      final s = await Permission.storage.request();
+      hasStoragePermission = s.isGranted;
+      final c = await Permission.camera.request();
+      hasCameraPermission.value = c.isGranted;
+      final m = await Permission.microphone.request();
+      hasMicrophonePermission = m.isGranted;
 
-      isAskingPermission = false;
-
-      return p.isGranted &&
-          p2.isGranted &&
-          p3.isGranted &&
-          p4.isGranted &&
-          p5.isGranted &&
-          p6.isGranted;
+      return c.isGranted;
     } catch (e) {
       debugPrint("Error asking permission");
       debugPrint(e.toString());
     }
 
+    isAskingPermission = true;
     return false;
   }
 
@@ -312,33 +315,27 @@ class CustomCameraController extends ChangeNotifier {
 
     XFile xfile = await controller.value!.takePicture();
 
-    if (!kIsWeb) {
-      final c = await _processImage(xfile, deviceAspectRatio);
+    if (kIsWeb) return;
 
-      if (c == null) {
-        //TODO: show error message here.
-        return;
-      }
+    final c = await _processImage(File(xfile.path), deviceAspectRatio);
 
-      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+    if (c == null) {
+      //TODO: show error message here.
+      return;
+    }
 
-      await ImageGallerySaver.saveImage(
-        await c.readAsBytes(),
-        quality: 100,
-        name: "$fileName.jpg",
-        isReturnImagePathOfIOS: true,
-      );
-      results.putIfAbsent(c.path, () => File(c.path));
+    image = c;
 
-      _loadImages();
+    String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+
+    if (hasStoragePermission) {
+      await ImageGallerySaver.saveFile(c.path, name: fileName);
     }
   }
 
   /// This process is required to store full screen images and to avoid the
   /// rotated picture error on store new image.
-  Future<File?> _processImage(XFile xfile, double deviceAspectRatio) async {
-    File file = File(xfile.path);
-
+  Future<File?> _processImage(File file, double deviceAspectRatio) async {
     img.Image? processedImage;
 
     if (isFullScreen) {
@@ -383,25 +380,41 @@ class CustomCameraController extends ChangeNotifier {
           newHeight.toInt(),
         );
       }
-      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      final r = File('$documentsDirectoryPath/$fileName.jpg')
-        ..create()
-        ..writeAsBytesSync(img.encodeJpg(processedImage));
-      file = results[file.path] ?? r;
-      return r;
     } else {
-      final processedImage = img.decodeJpg(file.readAsBytesSync().toList());
+      processedImage = img.decodeJpg(file.readAsBytesSync().toList());
+    }
 
-      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      final r = File('$documentsDirectoryPath/$fileName.jpg')
+    String currentTime = DateTime.now().millisecondsSinceEpoch.toString();
+    late File storedFile;
+
+    if (documentsDirectoryPath == null) {
+      final paths = split(file.path);
+      final fileExtension = extension(file.path, 1);
+      paths.removeRange(paths.length - 2, paths.length);
+
+      final finalPath = joinAll([...paths, currentTime]) + fileExtension;
+
+      storedFile = File(finalPath)
         ..create()
         ..writeAsBytesSync(
           img.encodeJpg(processedImage!),
         );
-      file = results[file.path] ?? r;
+    } else {
+      // String fileName = join(documentsDirectoryPath!, currentTime);
+      // storedFile = File("$fileName.jpg")
+      //   ..create()
+      //   ..writeAsBytesSync(
+      //     img.encodeJpg(processedImage!),
+      //   );
+      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
+      final tmp = File('$documentsDirectoryPath/$fileName');
 
-      return r;
+      await tmp.writeAsBytes(img.encodeJpg(processedImage!));
+
+      storedFile = tmp;
     }
+
+    return storedFile;
   }
 
   void switchCamera() {
@@ -435,14 +448,15 @@ class CustomCameraController extends ChangeNotifier {
       for (var element in images) {
         files.add(File(element.path));
       }
-      compressImages(files);
+      //TODO: Update to multiple pick
+      compressImages(files.first);
     } else {
       final XFile? image = await picker.pickImage(source: ImageSource.gallery);
       if (image == null) {
         return;
       }
       File file = File(image.path);
-      compressImages([file]);
+      compressImages(file);
     }
   }
 
@@ -460,37 +474,29 @@ class CustomCameraController extends ChangeNotifier {
     selectedIndexes.notifyListeners();
   }
 
-  Future<void> compressImages(List<File> files) async {
-    for (File file in files) {
-      if (results.containsKey(file.path)) {
-        continue;
-      }
+  Future<void> compressImages(File file) async {
+    var decodedImage = await decodeImageFromList(file.readAsBytesSync());
 
-      var decodedImage = await decodeImageFromList(file.readAsBytesSync());
+    var result = await FlutterImageCompress.compressWithFile(
+      file.absolute.path,
+      minHeight: decodedImage.height,
+      minWidth: decodedImage.width,
+      quality: compressionQuality,
+      //This is necessary for avoiding exif images being shown horizontally.
+      autoCorrectionAngle: true,
+      keepExif: false,
+      rotate: 0,
+      format: CompressFormat.jpeg,
+    );
+    Uint8List? blobBytes = result;
 
-      var result = await FlutterImageCompress.compressWithFile(
-        file.absolute.path,
-        minHeight: decodedImage.height,
-        minWidth: decodedImage.width,
-        quality: compressionQuality,
-        //This is necessary for avoiding exif images being shown horizontally.
-        autoCorrectionAngle: true,
-        keepExif: false,
-        rotate: 0,
-        format: CompressFormat.jpeg,
-      );
-      Uint8List? blobBytes = result;
-
-      var dir = await getTemporaryDirectory();
-      String trimmed = dir.absolute.path;
-      String dateTimeString =
-          dateTimeToString(DateTime.now(), "dd-yyyy-MMM HH:mm:ss a");
-      String pathString = "$trimmed/$dateTimeString.jpeg";
-      File newFile = File(pathString);
-      newFile.writeAsBytesSync(List.from(blobBytes!));
-
-      results.putIfAbsent(file.path, () => newFile);
-    }
+    var dir = await getTemporaryDirectory();
+    String trimmed = dir.absolute.path;
+    String dateTimeString =
+        dateTimeToString(DateTime.now(), "dd-yyyy-MMM HH:mm:ss a");
+    String pathString = "$trimmed/$dateTimeString.jpeg";
+    File newFile = File(pathString);
+    newFile.writeAsBytesSync(List.from(blobBytes!));
   }
 
   static String dateTimeToString(DateTime dateTime, String pattern) {
@@ -524,17 +530,17 @@ class CustomCameraController extends ChangeNotifier {
     final result = await _stopVideoRecording();
     _stopDurationTimer();
 
+    /// TODO: Create a shared [storeFile(file)] method
     if (result != null) {
+      String? galleryFilePath;
       String fileName = DateTime.now().millisecondsSinceEpoch.toString();
 
-      final r = await ImageGallerySaver.saveFile(result.path, name: fileName);
-
-      if (r["isSuccess"] as bool) {
-        videoFile = File(r["filePath"]);
-        debugPrint("Video saved!");
-      } else {
-        debugPrint(r["errorMessage"]);
+      if (hasStoragePermission) {
+        final r = await ImageGallerySaver.saveFile(result.path, name: fileName);
+        galleryFilePath = r["filePath"];
       }
+
+      videoFile = File(galleryFilePath ?? result.path);
     }
   }
 

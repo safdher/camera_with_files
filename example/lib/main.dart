@@ -34,7 +34,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<File> files = [];
+  File? file;
   bool isFullScreen = false;
 
   @override
@@ -51,9 +51,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   void onTap(bool isFullScreen) async {
-    files.clear();
     var data = await Navigator.of(context).push(
-      MaterialPageRoute<List<File>>(
+      MaterialPageRoute<File>(
         builder: (_) => CameraApp(
           compressionQuality: 1.0,
           isMultipleSelection: false,
@@ -66,7 +65,7 @@ class _HomePageState extends State<HomePage> {
     restoreUIBars();
 
     setState(() {
-      files = data ?? [];
+      file = data;
       this.isFullScreen = isFullScreen;
     });
   }
@@ -81,28 +80,25 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (files.isNotEmpty)
-                ...files.map<Widget>((e) {
-                  if (isVideo(e.path)) {
-                    return ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: size.width,
-                        maxHeight: size.height,
+              if (file != null)
+                isVideo(file!.path)
+                    ? ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: size.width,
+                          maxHeight: size.height,
+                        ),
+                        child: VideoPlayer(
+                          videoFile: file!,
+                          key: ValueKey(file!.path),
+                          isFullScreen: isFullScreen,
+                        ),
+                      )
+                    : SizedBox.fromSize(
+                        key: ValueKey(file!.path),
+                        size: size,
+                        child: Image.file(file!, fit: BoxFit.contain),
                       ),
-                      child: VideoPlayer(
-                        videoFile: e,
-                        key: ValueKey(e.path),
-                        isFullScreen: isFullScreen,
-                      ),
-                    );
-                  }
 
-                  return SizedBox.fromSize(
-                    key: ValueKey(e.path),
-                    size: size,
-                    child: Image.file(e, fit: BoxFit.contain),
-                  );
-                }).toList(),
               // if (files.isEmpty)
               Column(
                 children: [

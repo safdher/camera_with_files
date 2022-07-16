@@ -3,7 +3,6 @@ library camera_with_files;
 import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
-import 'package:camera_with_files/colors.dart';
 import 'package:camera_with_files/custom_camera_controller.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -139,9 +138,19 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
                           child: Center(child: CameraPreview(val)),
                         );
                       }),
-                  widget.isFullScreen
-                      ? const FullScreenUI()
-                      : const CroppedScreenUI()
+                  ValueListenableBuilder<bool>(
+                    valueListenable: controller.hasCameraPermission,
+                    builder: (c, val, child) {
+                      if (!val) {
+                        return const Center(
+                            child: Text("Camera permission not granted."));
+                      }
+                      return child!;
+                    },
+                    child: widget.isFullScreen
+                        ? const FullScreenUI()
+                        : const CroppedScreenUI(),
+                  )
                 ],
               ),
             ),
@@ -172,29 +181,21 @@ class CroppedScreenUI extends StatelessWidget {
                   padding: const EdgeInsets.all(8.0),
                   child: Row(
                     children: [
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: SizedBox.square(
-                            dimension: 48,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              onPressed: Navigator.of(context).pop,
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                color: Colors.white,
-                              ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox.square(
+                          dimension: 48,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            onPressed: Navigator.of(context).pop,
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white,
                             ),
                           ),
                         ),
                       ),
-                      const Expanded(
-                        child: SizedBox(
-                          height: 48,
-                          child: Center(child: DurationCounter()),
-                        ),
-                      ),
-                      const Expanded(child: Center(child: SizedBox.shrink())),
+                      const Spacer(),
                     ],
                   ),
                 ),
@@ -233,6 +234,11 @@ class CroppedScreenBottomPanel extends StatelessWidget {
             child: SizedBox(
               child: Column(
                 children: [
+                  const DurationCounter(
+                    label: "Tap for photo, hold for video",
+                    style: TextStyle(fontSize: 14),
+                  ),
+
                   //Buttons panel
                   Padding(
                     padding: const EdgeInsets.only(
@@ -295,24 +301,9 @@ class CroppedScreenBottomPanel extends StatelessWidget {
                     ),
                   ),
 
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16, bottom: 16),
-                    child: SizedBox(
-                      height: 18,
-                      child: ValueListenableBuilder<int?>(
-                        valueListenable: controller.timeInSeconds,
-                        builder: (c, val, _) {
-                          if (val == null) {
-                            return const Text(
-                              "Tap for photo, hold for video",
-                              style: TextStyle(color: Colors.white),
-                            );
-                          }
-
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                    ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16, bottom: 16),
+                    child: SizedBox(height: 18),
                   ),
                 ],
               ),
@@ -466,28 +457,31 @@ class FullScreenBottomPanel extends StatelessWidget {
 }
 
 class DurationCounter extends StatelessWidget {
-  const DurationCounter({Key? key, this.label}) : super(key: key);
+  const DurationCounter({Key? key, this.label, this.style}) : super(key: key);
 
+  final TextStyle? style;
   final String? label;
 
   @override
   Widget build(BuildContext context) {
     final controller = InheritedCameraController.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 6, bottom: 6),
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
       child: ValueListenableBuilder<int?>(
         valueListenable: controller.timeInSeconds,
         builder: (c, val, _) {
           if (val == null) {
             return Text(
               label ?? "",
-              style: const TextStyle(color: Colors.white, fontSize: 18),
+              style: const TextStyle(color: Colors.white, fontSize: 14)
+                  .merge(style),
             );
           }
 
           return Text(
             controller.time,
-            style: const TextStyle(color: troveAccent, fontSize: 18),
+            style:
+                const TextStyle(color: Colors.white, fontSize: 14).merge(style),
           );
         },
       ),
@@ -605,7 +599,7 @@ class _ActionButtonState extends State<ActionButton>
     await controller.stopVideoRecording();
 
     if (controller.videoFile != null && mounted) {
-      Navigator.of(context).pop([controller.videoFile as File]);
+      Navigator.of(context).pop(controller.videoFile as File);
     }
   }
 
@@ -620,8 +614,7 @@ class _ActionButtonState extends State<ActionButton>
         await controller.takePicture(MediaQuery.of(context).size.aspectRatio);
 
         if (mounted && !controller.isTakingPicture) {
-          final files = controller.results.values.map((e) => e).toList();
-          Navigator.of(context).pop(files);
+          Navigator.of(context).pop(controller.image);
         }
       },
       onLongPress: () async {
