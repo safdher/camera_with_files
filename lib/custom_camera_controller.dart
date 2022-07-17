@@ -1,17 +1,12 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_gallery_saver/image_gallery_saver.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_gallery/photo_gallery.dart';
 import 'package:video_player/video_player.dart';
@@ -71,7 +66,7 @@ class CustomCameraController extends ChangeNotifier {
   List<Album> imageAlbums = [];
   //Contains all the images, already compressed.
   File? image;
-  int camIndex = 0;
+  static int camIndex = 0;
   int pageIndex = 1;
   int pageCount = 10;
   final ResolutionPreset cameraResolution;
@@ -92,9 +87,6 @@ class CustomCameraController extends ChangeNotifier {
   static const timerIntervalInMilliseconds = 17;
   bool cancelTimer = false;
   Timer? timer;
-
-  //Storage related
-  String? documentsDirectoryPath;
 
   //Permission related
   bool isAskingPermission = false;
@@ -129,11 +121,6 @@ class CustomCameraController extends ChangeNotifier {
         }
       }
     });
-
-    if (hasStoragePermission) {
-      getApplicationDocumentsDirectory()
-          .then((value) => documentsDirectoryPath = value.path);
-    }
   }
 
   @override
@@ -317,32 +304,30 @@ class CustomCameraController extends ChangeNotifier {
 
     if (kIsWeb) return;
 
-    final c = await _processImage(File(xfile.path), deviceAspectRatio);
+    image = await _processImage(File(xfile.path), deviceAspectRatio);
 
-    if (c == null) {
-      //TODO: show error message here.
-      return;
-    }
-
-    image = c;
-
-    String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-
-    if (hasStoragePermission) {
-      await ImageGallerySaver.saveFile(c.path, name: fileName);
+    if (image != null) {
+      _saveOnGallery(image!);
     }
   }
 
-  /// This process is required to store full screen images and to avoid the
-  /// rotated picture error on store new image.
-  Future<File?> _processImage(File file, double deviceAspectRatio) async {
+  /// This process is required to store full screen images.
+  Future<File?> _processImage(
+    File originalFile,
+    double deviceAspectRatio,
+  ) async {
     img.Image? processedImage;
+    var originalImg = img.decodeJpg(await originalFile.readAsBytes());
+
+    if (originalImg == null) return null;
+
+    //The alternative solution here is to mirror the preview.
+    if (cameras.value[camIndex].lensDirection == CameraLensDirection.front &&
+        Platform.isAndroid) {
+      originalImg = img.flipHorizontal(originalImg);
+    }
 
     if (isFullScreen) {
-      var originalImg = img.decodeJpg(await file.readAsBytes());
-
-      if (originalImg == null) return null;
-
       final originalImgAspectRatio = originalImg.width / originalImg.height;
 
       if (originalImgAspectRatio > deviceAspectRatio) {
@@ -381,40 +366,31 @@ class CustomCameraController extends ChangeNotifier {
         );
       }
     } else {
-      processedImage = img.decodeJpg(file.readAsBytesSync().toList());
+      processedImage = originalImg;
     }
-
+    final paths = split(originalFile.path);
+    final fileExtension = extension(originalFile.path, 1);
+    paths.removeRange(paths.length - 2, paths.length);
     String currentTime = DateTime.now().millisecondsSinceEpoch.toString();
-    late File storedFile;
+    final finalPath = joinAll([...paths, currentTime]) + fileExtension;
+    return File(finalPath)
+      ..create()
+      ..writeAsBytesSync(
+        img.encodeJpg(processedImage),
+      );
+  }
 
-    if (documentsDirectoryPath == null) {
-      final paths = split(file.path);
-      final fileExtension = extension(file.path, 1);
-      paths.removeRange(paths.length - 2, paths.length);
-
-      final finalPath = joinAll([...paths, currentTime]) + fileExtension;
-
-      storedFile = File(finalPath)
-        ..create()
-        ..writeAsBytesSync(
-          img.encodeJpg(processedImage!),
-        );
-    } else {
-      // String fileName = join(documentsDirectoryPath!, currentTime);
-      // storedFile = File("$fileName.jpg")
-      //   ..create()
-      //   ..writeAsBytesSync(
-      //     img.encodeJpg(processedImage!),
-      //   );
+  /// Save the file on the Gallery and return it's references.
+  /// If the app doesn't have the storage permission the initial File object is returned
+  Future<File> _saveOnGallery(File file) async {
+    if (hasStoragePermission) {
       String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      final tmp = File('$documentsDirectoryPath/$fileName');
+      final r = await ImageGallerySaver.saveFile(file.path, name: fileName);
 
-      await tmp.writeAsBytes(img.encodeJpg(processedImage!));
-
-      storedFile = tmp;
+      return File(r["filePath"]);
+    } else {
+      return file;
     }
-
-    return storedFile;
   }
 
   void switchCamera() {
@@ -437,29 +413,6 @@ class CustomCameraController extends ChangeNotifier {
     isFlashOn.value = controller.value!.value.flashMode != FlashMode.off;
   }
 
-  void pickFiles() async {
-    final ImagePicker picker = ImagePicker();
-    if (isMultipleSelection.value) {
-      final List<XFile>? images = await picker.pickMultiImage();
-      if (images == null) {
-        return;
-      }
-      List<File> files = [];
-      for (var element in images) {
-        files.add(File(element.path));
-      }
-      //TODO: Update to multiple pick
-      compressImages(files.first);
-    } else {
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-      if (image == null) {
-        return;
-      }
-      File file = File(image.path);
-      compressImages(file);
-    }
-  }
-
   void addToSelection(int index) async {
     if (!isMultipleSelection.value && selectedIndexes.value.isNotEmpty) {
       return;
@@ -472,36 +425,6 @@ class CustomCameraController extends ChangeNotifier {
     }
 
     selectedIndexes.notifyListeners();
-  }
-
-  Future<void> compressImages(File file) async {
-    var decodedImage = await decodeImageFromList(file.readAsBytesSync());
-
-    var result = await FlutterImageCompress.compressWithFile(
-      file.absolute.path,
-      minHeight: decodedImage.height,
-      minWidth: decodedImage.width,
-      quality: compressionQuality,
-      //This is necessary for avoiding exif images being shown horizontally.
-      autoCorrectionAngle: true,
-      keepExif: false,
-      rotate: 0,
-      format: CompressFormat.jpeg,
-    );
-    Uint8List? blobBytes = result;
-
-    var dir = await getTemporaryDirectory();
-    String trimmed = dir.absolute.path;
-    String dateTimeString =
-        dateTimeToString(DateTime.now(), "dd-yyyy-MMM HH:mm:ss a");
-    String pathString = "$trimmed/$dateTimeString.jpeg";
-    File newFile = File(pathString);
-    newFile.writeAsBytesSync(List.from(blobBytes!));
-  }
-
-  static String dateTimeToString(DateTime dateTime, String pattern) {
-    final format = DateFormat(pattern);
-    return format.format(dateTime);
   }
 
   Future<void> startVideoRecording() async {
@@ -528,19 +451,9 @@ class CustomCameraController extends ChangeNotifier {
 
   Future<void> stopVideoRecording() async {
     final result = await _stopVideoRecording();
-    _stopDurationTimer();
-
-    /// TODO: Create a shared [storeFile(file)] method
+    _cancelDurationTimer();
     if (result != null) {
-      String? galleryFilePath;
-      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-
-      if (hasStoragePermission) {
-        final r = await ImageGallerySaver.saveFile(result.path, name: fileName);
-        galleryFilePath = r["filePath"];
-      }
-
-      videoFile = File(galleryFilePath ?? result.path);
+      videoFile = await _saveOnGallery(File(result.path));
     }
   }
 
@@ -627,7 +540,7 @@ class CustomCameraController extends ChangeNotifier {
     });
   }
 
-  void _stopDurationTimer() {
+  void _cancelDurationTimer() {
     cancelTimer = true;
     timer?.cancel();
     timer = null;
