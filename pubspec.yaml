@@ -10,17 +10,24 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  # Images viewer
   photo_gallery: ^1.1.1
-  permission_handler: ^10.0.0
   image_gallery_saver: ^1.7.1
+
+  permission_handler: ^10.0.0
+
   camera: ^0.9.8+1
-  image_picker: ^0.8.5+3
-  flutter_image_compress: ^1.1.0
-  intl: ^0.17.0
-  path_provider: ^2.0.11
   video_player: ^2.4.5
   image: ^3.2.0
+
+  # Storage related
+  # Required to show the created files on the gallery of the O.S.
+  media_scanner: ^2.1.0
+  path_provider: ^2.0.11
   path: ^1.8.1
+
+  intl: ^0.17.0
 
 dev_dependencies:
   flutter_test:

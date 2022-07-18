@@ -59,6 +59,8 @@ class _HomePageState extends State<HomePage> {
           showGallery: false,
           showOpenGalleryButton: false,
           isFullScreen: isFullScreen,
+          storeOnGallery: true,
+          directoryName: "sidestory",
         ),
       ),
     );
@@ -90,7 +92,6 @@ class _HomePageState extends State<HomePage> {
                         child: VideoPlayer(
                           videoFile: file!,
                           key: ValueKey(file!.path),
-                          isFullScreen: isFullScreen,
                         ),
                       )
                     : SizedBox.fromSize(

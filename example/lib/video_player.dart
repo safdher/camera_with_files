@@ -5,14 +5,13 @@ import 'package:video_player/video_player.dart' as vp;
 import 'package:flutter/material.dart';
 
 class VideoPlayer extends StatefulWidget {
-  VideoPlayer({Key? key, required this.videoFile, this.isFullScreen = false})
+  VideoPlayer({Key? key, required this.videoFile})
       : super(
           //This way the video player doesn't cache any recorded video files played before.
           key: key ?? ValueKey(videoFile.path),
         );
 
   final File videoFile;
-  final bool isFullScreen;
 
   @override
   VideoPlayerState createState() => VideoPlayerState();
@@ -46,12 +45,10 @@ class VideoPlayerState extends State<VideoPlayer> {
     return Scaffold(
       body: _controller.value.isInitialized
           ? Center(
-              child: widget.isFullScreen
-                  ? vp.VideoPlayer(_controller)
-                  : AspectRatio(
-                      aspectRatio: _controller.value.aspectRatio,
-                      child: vp.VideoPlayer(_controller),
-                    ),
+              child: AspectRatio(
+                aspectRatio: _controller.value.aspectRatio,
+                child: vp.VideoPlayer(_controller),
+              ),
             )
           : const SizedBox.shrink(),
       floatingActionButton: FloatingActionButton(

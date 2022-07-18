@@ -5,8 +5,9 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:media_scanner/media_scanner.dart';
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_gallery/photo_gallery.dart';
 import 'package:video_player/video_player.dart';
@@ -38,41 +39,47 @@ class CustomCameraController extends ChangeNotifier {
     double compressionQuality = 1,
     this.cameraResolution = ResolutionPreset.max,
     this.isFullScreen = false,
+    this.storeOnGallery = false,
+    this.directoryName,
   }) {
     assert(
       compressionQuality > 0 && compressionQuality <= 1,
       "compressionQuality value must be bettwen 0 (exclusive) and 1 (inclusive)",
     );
+    if (storeOnGallery) {
+      assert(
+        directoryName != null,
+        "To store the file in a public folder you have pass a  directory name",
+      );
+    }
+
     this.compressionQuality = (compressionQuality * 100).toInt();
     this.isMultipleSelection.value = isMultipleSelection;
 
     _init();
   }
 
+  //TODO: Allow multiple selection
   final isMultipleSelection = ValueNotifier(false);
-  late final int compressionQuality;
 
+  // Related to Gallery media listing
   var selectedIndexes = ValueNotifier<List<int>>([]);
-
   var imageMedium = ValueNotifier<Set<Medium>>({});
-
-  final controller = ValueNotifier<CameraController?>(null);
-  final isFlashOn = ValueNotifier(false);
-
   var isExpandedPicturesPanel = ValueNotifier(false);
   var count = ValueNotifier<int>(0);
-
-  final cameras = ValueNotifier<List<CameraDescription>>([]);
   List<Album> imageAlbums = [];
-  //Contains all the images, already compressed.
-  File? image;
-  static int camIndex = 0;
   int pageIndex = 1;
   int pageCount = 10;
-  final ResolutionPreset cameraResolution;
-
   final imagesCarouselController = ScrollController();
 
+  // Camera related
+  final controller = ValueNotifier<CameraController?>(null);
+  final isFlashOn = ValueNotifier(false);
+  late final int compressionQuality;
+  final cameras = ValueNotifier<List<CameraDescription>>([]);
+  static int currentCameraIndex = 0;
+  final ResolutionPreset cameraResolution;
+  File? image;
   final bool isFullScreen;
 
   //Video related
@@ -88,11 +95,20 @@ class CustomCameraController extends ChangeNotifier {
   bool cancelTimer = false;
   Timer? timer;
 
-  //Permission related
+  // Storage related
+  /// The directory name to be used for storing the files if [storeOnGallery] is true.
+  ///
+  String? directoryName;
+  Directory? rootDirectory;
+
+  // Permission related
+  bool storeOnGallery = false;
   bool isAskingPermission = false;
   bool hasMicrophonePermission = false;
   final hasCameraPermission = ValueNotifier(false);
+  // Required for storing media on the documents folder
   bool hasStoragePermission = false;
+  bool hasIOSPhotosPermission = false;
 
   Future<void> _init() async {
     if (!await _requestPermissions()) return;
@@ -102,6 +118,8 @@ class CustomCameraController extends ChangeNotifier {
     _loadImages();
 
     await updateSelectedCamera();
+
+    rootDirectory = await _filesDirectory;
 
     imagesCarouselController.addListener(() {
       if (!imagesCarouselController.hasClients) return;
@@ -193,7 +211,7 @@ class CustomCameraController extends ChangeNotifier {
       );
     } else {
       cameraController = CameraController(
-        cameras.value[camIndex],
+        cameras.value[currentCameraIndex],
         imageFormatGroup: ImageFormatGroup.jpeg,
         cameraResolution,
         enableAudio: hasMicrophonePermission,
@@ -253,6 +271,7 @@ class CustomCameraController extends ChangeNotifier {
     debugPrint("========\n$message");
   }
 
+  // TODO: Extract to Usecase
   void _loadImages() async {
     if (kIsWeb || !hasStoragePermission) {
       return;
@@ -278,14 +297,17 @@ class CustomCameraController extends ChangeNotifier {
     isAskingPermission = true;
 
     try {
-      final s = await Permission.storage.request();
-      hasStoragePermission = s.isGranted;
-      final c = await Permission.camera.request();
-      hasCameraPermission.value = c.isGranted;
-      final m = await Permission.microphone.request();
-      hasMicrophonePermission = m.isGranted;
+      hasStoragePermission = await _requestPermission(Permission.storage);
 
-      return c.isGranted;
+      hasCameraPermission.value = await _requestPermission(Permission.camera);
+
+      hasMicrophonePermission = await _requestPermission(Permission.microphone);
+
+      if (Platform.isIOS) {
+        hasIOSPhotosPermission = await _requestPermission(Permission.photos);
+      }
+
+      return hasCameraPermission.value;
     } catch (e) {
       debugPrint("Error asking permission");
       debugPrint(e.toString());
@@ -293,6 +315,12 @@ class CustomCameraController extends ChangeNotifier {
 
     isAskingPermission = true;
     return false;
+  }
+
+  Future<bool> _requestPermission(Permission p) async {
+    if (await p.isGranted) return true;
+
+    return (await p.request()).isGranted;
   }
 
   Future<void> takePicture(double deviceAspectRatio) async {
@@ -307,11 +335,12 @@ class CustomCameraController extends ChangeNotifier {
     image = await _processImage(File(xfile.path), deviceAspectRatio);
 
     if (image != null) {
-      _saveOnGallery(image!);
+      _saveOnGallery(image!, ".jpg");
     }
   }
 
-  /// This process is required to store full screen images.
+  /// This process is required to for cropping full screen pictures.
+  // TODO: Extract to Usecase
   Future<File?> _processImage(
     File originalFile,
     double deviceAspectRatio,
@@ -322,7 +351,8 @@ class CustomCameraController extends ChangeNotifier {
     if (originalImg == null) return null;
 
     //The alternative solution here is to mirror the preview.
-    if (cameras.value[camIndex].lensDirection == CameraLensDirection.front &&
+    if (cameras.value[currentCameraIndex].lensDirection ==
+            CameraLensDirection.front &&
         Platform.isAndroid) {
       originalImg = img.flipHorizontal(originalImg);
     }
@@ -380,24 +410,83 @@ class CustomCameraController extends ChangeNotifier {
       );
   }
 
-  /// Save the file on the Gallery and return it's references.
-  /// If the app doesn't have the storage permission the initial File object is returned
-  Future<File> _saveOnGallery(File file) async {
-    if (hasStoragePermission) {
-      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      final r = await ImageGallerySaver.saveFile(file.path, name: fileName);
-
-      return File(r["filePath"]);
-    } else {
-      return file;
+  // TODO: Extract to Usecase
+  Future<File?> _saveOnGallery(
+    File file,
+    String fileExtension,
+  ) async {
+    if (!hasStoragePermission || !storeOnGallery || directoryName == null) {
+      return null;
     }
+
+    rootDirectory = rootDirectory ?? await _filesDirectory;
+
+    if (rootDirectory == null) return null;
+
+    Directory withinDirectory = rootDirectory!;
+
+    try {
+      if (Platform.isAndroid) {
+        String newPath = "";
+
+        List<String> paths = withinDirectory.path.split("/");
+        for (int i = 1; i < paths.length; i++) {
+          String folder = paths[i];
+          if (folder != "Android") {
+            newPath += "/$folder";
+          } else {
+            break;
+          }
+        }
+        newPath = "$newPath/$directoryName";
+        withinDirectory = Directory(newPath);
+      } else {
+        //TODO: for IOS, check if the default directory is working good.
+      }
+
+      if (!await withinDirectory.exists()) {
+        await withinDirectory.create(recursive: true);
+      }
+      if (await withinDirectory.exists()) {
+        final fileName =
+            "${DateTime.now().millisecondsSinceEpoch}$fileExtension";
+
+        final finalFile = File("${withinDirectory.path}/$fileName")
+          ..writeAsBytes(
+            file.readAsBytesSync(),
+          );
+
+        if (Platform.isAndroid) {
+          MediaScanner.loadMedia(path: finalFile.path);
+        } else {
+          //TODO: If needed, scan the new media for IOs too.
+        }
+
+        return finalFile;
+      }
+      return null;
+    } catch (e) {
+      print(e);
+    }
+    return null;
+  }
+
+  Future<Directory?> get _filesDirectory async {
+    if (Platform.isAndroid && hasStoragePermission) {
+      return await getExternalStorageDirectory();
+    } else {
+      if (hasIOSPhotosPermission) {
+        return await getApplicationDocumentsDirectory();
+      }
+    }
+    return null;
   }
 
   void switchCamera() {
-    if (camIndex + 1 >= cameras.value.length) {
-      camIndex = 0;
+    if (currentCameraIndex + 1 >= cameras.value.length) {
+      currentCameraIndex = 0;
     } else {
-      camIndex++;
+      currentCameraIndex++;
     }
 
     updateSelectedCamera();
@@ -411,20 +500,6 @@ class CustomCameraController extends ChangeNotifier {
     }
 
     isFlashOn.value = controller.value!.value.flashMode != FlashMode.off;
-  }
-
-  void addToSelection(int index) async {
-    if (!isMultipleSelection.value && selectedIndexes.value.isNotEmpty) {
-      return;
-    }
-
-    if (selectedIndexes.value.contains(index)) {
-      selectedIndexes.value.remove(index);
-    } else {
-      selectedIndexes.value.add(index);
-    }
-
-    selectedIndexes.notifyListeners();
   }
 
   Future<void> startVideoRecording() async {
@@ -453,7 +528,9 @@ class CustomCameraController extends ChangeNotifier {
     final result = await _stopVideoRecording();
     _cancelDurationTimer();
     if (result != null) {
-      videoFile = await _saveOnGallery(File(result.path));
+      final file = File(result.path);
+      videoFile = file;
+      await _saveOnGallery(file, ".mp4");
     }
   }
 
@@ -507,8 +584,9 @@ class CustomCameraController extends ChangeNotifier {
     debugPrint(e.description);
   }
 
+  // TODO: Extract to Usecase
   /// Returns the String representation of the video duration.
-  String get time {
+  String get videoDuration {
     if (timeInSeconds.value == null) return "";
 
     final int minutes = (timeInSeconds.value! ~/ 60);
@@ -545,5 +623,19 @@ class CustomCameraController extends ChangeNotifier {
     timer?.cancel();
     timer = null;
     timeInSeconds.value = null;
+  }
+
+  void addToSelection(int index) async {
+    if (!isMultipleSelection.value && selectedIndexes.value.isNotEmpty) {
+      return;
+    }
+
+    if (selectedIndexes.value.contains(index)) {
+      selectedIndexes.value.remove(index);
+    } else {
+      selectedIndexes.value.add(index);
+    }
+
+    selectedIndexes.notifyListeners();
   }
 }

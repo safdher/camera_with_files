@@ -19,6 +19,8 @@ class CameraApp extends StatefulWidget {
     this.showGallery = true,
     this.showOpenGalleryButton = true,
     this.isFullScreen = true,
+    this.storeOnGallery = false,
+    this.directoryName,
   }) : assert(
           compressionQuality > 0 && compressionQuality <= 1,
           "compressionQuality value must be bettwen 0 (exclusive) and 1 (inclusive)",
@@ -30,6 +32,11 @@ class CameraApp extends StatefulWidget {
   final bool showGallery;
   final bool showOpenGalleryButton;
   final bool isFullScreen;
+  final bool storeOnGallery;
+
+  /// The directory name to be used for storing the files if [storeOnGallery] is true.
+  /// Enter an aplhanumeric WORD, e.g.: myFolder, myFirstDirectory, directory32
+  final String? directoryName;
 
   @override
   State<CameraApp> createState() => _CameraAppState();
@@ -46,6 +53,8 @@ class _CameraAppState extends State<CameraApp> with WidgetsBindingObserver {
       isMultipleSelection: widget.isMultipleSelection,
       cameraResolution: widget.cameraResolution,
       isFullScreen: widget.isFullScreen,
+      storeOnGallery: widget.storeOnGallery,
+      directoryName: widget.directoryName,
     );
     WidgetsBinding.instance.addObserver(this);
   }
@@ -479,7 +488,7 @@ class DurationCounter extends StatelessWidget {
           }
 
           return Text(
-            controller.time,
+            controller.videoDuration,
             style:
                 const TextStyle(color: Colors.white, fontSize: 14).merge(style),
           );

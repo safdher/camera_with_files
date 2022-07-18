@@ -35,3 +35,18 @@ builder:(BuildContext context)=> const CameraApp(
 isMultiple :false
 ),),);
 ```
+
+# Album related
+## For storing IOs files in the documents folder
+
+Add this to your info.plist:
+<key>LSSupportsOpeningDocumentsInPlace</key>
+<true/>
+<key>UIFileSharingEnabled</key>
+<true/>
+
+Minumum platform versions: Android 16, iOS 9.0, macOS 10.15.
+
+Android: Android config preparation.
+iOS: iOS config preparation.
+macOS: Pretty much the same with iOS.
