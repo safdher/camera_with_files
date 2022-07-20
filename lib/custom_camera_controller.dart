@@ -146,9 +146,9 @@ class CustomCameraController extends ChangeNotifier {
     isMultipleSelection.dispose();
     selectedIndexes.dispose();
     imageMedium.dispose();
-    if (controller.hasListeners) {
-      controller.dispose();
-    }
+
+    controller.dispose();
+
     isFlashOn.dispose();
     isExpandedPicturesPanel.dispose();
     count.dispose();
@@ -161,7 +161,6 @@ class CustomCameraController extends ChangeNotifier {
     //Duration Timer related
     timeInSeconds.dispose();
     timer?.cancel();
-
     super.dispose();
   }
 
@@ -181,8 +180,9 @@ class CustomCameraController extends ChangeNotifier {
     switch (state) {
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
-        controller.value = null;
-        await oldController?.dispose();
+        if (_isRecordingVideo) {
+          await stopVideoRecording();
+        }
         break;
 
       case AppLifecycleState.resumed:
@@ -192,6 +192,12 @@ class CustomCameraController extends ChangeNotifier {
       default:
         break;
     }
+  }
+
+  bool get _isRecordingVideo {
+    if (controller.value == null) return false;
+
+    return controller.value!.value.isRecordingVideo;
   }
 
   Future<void> updateSelectedCamera(
@@ -335,7 +341,7 @@ class CustomCameraController extends ChangeNotifier {
     image = await _processImage(File(xfile.path), deviceAspectRatio);
 
     if (image != null) {
-      _saveOnGallery(image!, ".jpg");
+      _saveOnGallery(image!, isPicture: true);
     }
   }
 
@@ -411,62 +417,40 @@ class CustomCameraController extends ChangeNotifier {
   }
 
   // TODO: Extract to Usecase
-  Future<File?> _saveOnGallery(
-    File file,
-    String fileExtension,
-  ) async {
+  Future<File?> _saveOnGallery(File file, {bool isPicture = false}) async {
     if (!hasStoragePermission || !storeOnGallery || directoryName == null) {
       return null;
     }
 
-    rootDirectory = rootDirectory ?? await _filesDirectory;
-
-    if (rootDirectory == null) return null;
-
-    Directory withinDirectory = rootDirectory!;
-
     try {
+      File? finalFile;
       if (Platform.isAndroid) {
-        String newPath = "";
-
-        List<String> paths = withinDirectory.path.split("/");
-        for (int i = 1; i < paths.length; i++) {
-          String folder = paths[i];
-          if (folder != "Android") {
-            newPath += "/$folder";
+        late ScannerResultModel result;
+        try {
+          if (isPicture) {
+            result = await MediaScanner.saveImage(file.readAsBytesSync());
           } else {
-            break;
+            result = await MediaScanner.saveFile(file.path);
           }
+
+          if (result.isSuccess && result.filePath != null) {
+            finalFile = File(result.filePath!);
+          } else {
+            throw Exception(result.errorMessage);
+          }
+        } catch (e) {
+          _showCameraException(e, "MediaScannerExcetion");
         }
-        newPath = "$newPath/$directoryName";
-        withinDirectory = Directory(newPath);
       } else {
-        //TODO: for IOS, check if the default directory is working good.
+        rootDirectory = rootDirectory ?? await _filesDirectory;
+        //TODO: If needed, scan the new media for IOs too.
+        finalFile = File("$rootDirectory")
+          ..writeAsBytes(file.readAsBytesSync());
       }
 
-      if (!await withinDirectory.exists()) {
-        await withinDirectory.create(recursive: true);
-      }
-      if (await withinDirectory.exists()) {
-        final fileName =
-            "${DateTime.now().millisecondsSinceEpoch}$fileExtension";
-
-        final finalFile = File("${withinDirectory.path}/$fileName")
-          ..writeAsBytes(
-            file.readAsBytesSync(),
-          );
-
-        if (Platform.isAndroid) {
-          MediaScanner.loadMedia(path: finalFile.path);
-        } else {
-          //TODO: If needed, scan the new media for IOs too.
-        }
-
-        return finalFile;
-      }
-      return null;
+      return finalFile;
     } catch (e) {
-      print(e);
+      _showCameraException(e, "MediaScannerExcetion");
     }
     return null;
   }
@@ -530,7 +514,7 @@ class CustomCameraController extends ChangeNotifier {
     if (result != null) {
       final file = File(result.path);
       videoFile = file;
-      await _saveOnGallery(file, ".mp4");
+      await _saveOnGallery(file);
     }
   }
 
@@ -542,9 +526,9 @@ class CustomCameraController extends ChangeNotifier {
     }
 
     try {
-      return cameraController.stopVideoRecording();
+      return await cameraController.stopVideoRecording();
     } on CameraException catch (e) {
-      _showCameraException(e);
+      _showCameraException(e, "ERROR WHEN STOPPING THE VIDEO");
       return null;
     }
   }
@@ -579,9 +563,19 @@ class CustomCameraController extends ChangeNotifier {
     }
   }
 
-  void _showCameraException(CameraException e) {
-    debugPrint(e.code);
-    debugPrint(e.description);
+  void _showCameraException(dynamic e, [String? tag]) {
+    if (tag != null) {
+      debugPrint(tag);
+    }
+
+    //TODO: add other cases of exceptions
+    switch (e.runtimeType) {
+      case CameraException:
+        debugPrint((e as CameraException).code);
+        debugPrint(e.description);
+        break;
+      default:
+    }
   }
 
   // TODO: Extract to Usecase

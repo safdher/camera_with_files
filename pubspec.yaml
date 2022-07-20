@@ -23,7 +23,11 @@ dependencies:
 
   # Storage related
   # Required to show the created files on the gallery of the O.S.
-  media_scanner: ^2.1.0
+  media_scanner:
+    git:
+      url: https://github.com/reiko-dev/media_scanner.git
+      ref: b19fa1a2d225bb1cd6de712663564e8487454706
+
   path_provider: ^2.0.11
   path: ^1.8.1
 

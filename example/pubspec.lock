@@ -229,9 +229,11 @@ packages:
   media_scanner:
     dependency: transitive
     description:
-      name: media_scanner
-      url: "https://pub.dartlang.org"
-    source: hosted
+      path: "."
+      ref: b19fa1a2d225bb1cd6de712663564e8487454706
+      resolved-ref: b19fa1a2d225bb1cd6de712663564e8487454706
+      url: "https://github.com/reiko-dev/media_scanner.git"
+    source: git
     version: "2.1.0"
   meta:
     dependency: transitive
