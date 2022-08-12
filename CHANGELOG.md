@@ -37,3 +37,7 @@
 ## 0.0.10
 
 * iOS Changes
+
+## 0.0.12
+
+* File name Changes

@@ -506,164 +506,6 @@ class _CameraAppState extends State<CameraApp> {
               ],
             ),
           ),
-          // SlidingUpPanelWidget(
-          //   child: imageAlbums.isEmpty
-          //       ? Container()
-          //       : Container(
-          //           color: Colors.white,
-          //           child: Column(
-          //             children: [
-          //               Container(
-          //                 width: size.width,
-          //                 height: 50,
-          //                 padding: const EdgeInsets.only(left: 20, right: 20),
-          //                 child: Row(
-          //                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          //                   children: [
-          //                     indexList.isNotEmpty
-          //                         ? Text(
-          //                             indexList.length.toString() + " Selected")
-          //                         : const Text("Please Choose Images"),
-          //                     widget.isMultiple && indexList.isNotEmpty
-          //                         ? GestureDetector(
-          //                             onTap: () async {
-          //                               for (var element in indexList) {
-          //                                 File file = await imageMedium
-          //                                     .elementAt(element)
-          //                                     .getFile();
-          //                                 setState(() {
-          //                                   results.add(file);
-          //                                 });
-          //                               }
-          //                               compress(results);
-          //                             },
-          //                             child: const Text(
-          //                               "Done",
-          //                               style: TextStyle(
-          //                                   color: Colors.blue,
-          //                                   fontWeight: FontWeight.bold),
-          //                             ),
-          //                           )
-          //                         : Container(),
-          //                   ],
-          //                 ),
-          //               ),
-          //               Expanded(
-          //                 child: NotificationListener(
-          //                   onNotification: (t) {
-          //                     if (t is ScrollEndNotification) {
-          //                       if (bottomController.position.pixels == 0.0) {
-          //                         scroll++;
-          //                         print(scroll);
-          //                         if (scroll.isOdd) {
-          //                           print(scroll);
-          //                           panelController.collapse();
-          //                           scroll = 1;
-          //                         }
-          //                       }
-          //                       print(bottomController.position.pixels);
-          //                       return true;
-          //                     }
-          //                     return false;
-          //                   },
-          //                   child: GridView.count(
-          //                     crossAxisCount: 4,
-          //                     crossAxisSpacing: 10.0,
-          //                     mainAxisSpacing: 10.0,
-          //                     controller: bottomController,
-          //                     shrinkWrap: true,
-          //                     children: List.generate(
-          //                         count2,
-          //                         (index) => GestureDetector(
-          //                             onLongPress: () async {
-          //                               if (!widget.isMultiple) {
-          //                                 return;
-          //                               }
-          //                               if (indexList.contains(index)) {
-          //                                 setState(() {
-          //                                   indexList.remove(index);
-          //                                 });
-          //                               } else {
-          //                                 setState(() {
-          //                                   indexList.add(index);
-          //                                 });
-          //                               }
-          //                             },
-          //                             onTap: () async {
-          //                               if (indexList.isEmpty) {
-          //                                 File file = await imageMedium
-          //                                     .elementAt(index)
-          //                                     .getFile();
-          //                                 compress([file]);
-          //                               } else {
-          //                                 if (indexList.contains(index)) {
-          //                                   setState(() {
-          //                                     indexList.remove(index);
-          //                                   });
-          //                                 } else {
-          //                                   setState(() {
-          //                                     indexList.add(index);
-          //                                   });
-          //                                 }
-          //                               }
-          //                             },
-          //                             child: Stack(children: [
-          //                               Container(
-          //                                 width: size.width / 4,
-          //                                 height: size.width / 4,
-          //                                 margin:
-          //                                     const EdgeInsets.only(left: 2),
-          //                                 child: FadeInImage(
-          //                                   fit: BoxFit.cover,
-          //                                   placeholder: MemoryImage(bytes!),
-          //                                   image: ThumbnailProvider(
-          //                                       mediumId: imageMedium
-          //                                           .elementAt(index)
-          //                                           .id,
-          //                                       mediumType: MediumType.image,
-          //                                       highQuality: false),
-          //                                 ),
-          //                               ),
-          //                               if (indexList.contains(index))
-          //                                 Container(
-          //                                   margin:
-          //                                       const EdgeInsets.only(left: 2),
-          //                                   color: Colors.grey.withOpacity(0.4),
-          //                                   child: const Center(
-          //                                     child: Icon(
-          //                                       Icons.check,
-          //                                       color: Colors.white,
-          //                                     ),
-          //                                   ),
-          //                                 )
-          //                             ]))),
-          //                   ),
-          //                 ),
-          //               ),
-          //             ],
-          //           )),
-          //   controlHeight: 0.0,
-          //   anchor: 0.0,
-          //   panelController: panelController,
-          //   dragDown: (details) {
-          //     debugPrint("Drag Down");
-          //   },
-          //   dragStart: (details) {
-          //     debugPrint('dragStart');
-          //   },
-          //   dragCancel: () {
-          //     debugPrint('dragCancel');
-          //   },
-          //   dragUpdate: (details) {
-          //     double x = details.localPosition.dx;
-          //     debugPrint(x.toString());
-          //     debugPrint(
-          //         'dragUpdate,${panelController.status == SlidingUpPanelStatus.dragging ? 'dragging' : ''}');
-          //   },
-          //   dragEnd: (details) {
-          //     debugPrint('dragEnd');
-          //   },
-          // ),
         ],
       ),
     );
@@ -681,8 +523,7 @@ class _CameraAppState extends State<CameraApp> {
       Uint8List? blobBytes = await testCompressFile(file);
       var dir = await getTemporaryDirectory();
       String trimmed = dir.absolute.path;
-      String dateTimeString =
-          dateTimeToString(DateTime.now(), "dd-yyyy-MMM HH:mm a");
+      String dateTimeString = DateTime.now().millisecondsSinceEpoch.toString();
       String pathString = trimmed + "/" + dateTimeString + ".jpg";
       File fileNew = File(pathString);
       fileNew.writeAsBytesSync(List.from(blobBytes!));
@@ -698,23 +539,11 @@ class _CameraAppState extends State<CameraApp> {
   }
 
   Future<Uint8List?> testCompressFile(File file) async {
-    // int quality = widget.compressionQuality!;
     var decodedImage = await decodeImageFromList(file.readAsBytesSync());
-    // if (widget.compressedSize != null) {
-    //   int size = await file.length();
-    //   int qualitySize = widget.compressedSize!;
-    //   if (size > qualitySize) {
-    //     quality = (qualitySize / size * 100).ceil();
-    //   }
-    // }
     var result = await FlutterImageCompress.compressWithFile(file.absolute.path,
         minHeight: decodedImage.height,
         minWidth: decodedImage.width,
         quality: widget.compressionQuality!);
-
-    // int size = await file.length();
-    // print("Original Size");
-    // print(size);
     return result;
   }
 }
