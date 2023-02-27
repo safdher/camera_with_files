@@ -2,7 +2,6 @@ library camera_with_files;
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
@@ -19,10 +18,10 @@ import 'package:path_provider/path_provider.dart';
 class CameraApp extends StatefulWidget {
   final bool isMultiple;
   final bool isSimpleUI;
-  int? compressionQuality;
-  int? compressedSize;
+  final int? compressionQuality;
+  final int? compressedSize;
 
-  CameraApp(
+  const CameraApp(
       {Key? key,
       this.isMultiple = false,
       this.isSimpleUI = true,
@@ -31,10 +30,10 @@ class CameraApp extends StatefulWidget {
       : super(key: key);
 
   @override
-  _CameraAppState createState() => _CameraAppState();
+  CameraAppState createState() => CameraAppState();
 }
 
-class _CameraAppState extends State<CameraApp> {
+class CameraAppState extends State<CameraApp> {
   CameraController? controller;
   late List<CameraDescription> cameras;
   List<Album> imageAlbums = [];
@@ -260,17 +259,17 @@ class _CameraAppState extends State<CameraApp> {
                                   },
                                   onTap: () async {
                                     if (kIsWeb) {
-                                      final ImagePicker _picker = ImagePicker();
+                                      final ImagePicker picker = ImagePicker();
                                       if (widget.isMultiple) {
                                         List<XFile>? images =
-                                            await _picker.pickMultiImage();
+                                            await picker.pickMultiImage();
                                         List<File> file = [];
                                         for (var element in images) {
                                           file.add(File(element.path));
                                         }
                                         compress(file);
                                       } else {
-                                        XFile? image = await _picker.pickImage(
+                                        XFile? image = await picker.pickImage(
                                             source: ImageSource.gallery);
                                         File file = File(image!.path);
                                         compress([file]);
@@ -386,11 +385,11 @@ class _CameraAppState extends State<CameraApp> {
                               (!kIsWeb)
                                   ? IconButton(
                                       onPressed: () async {
-                                        final ImagePicker _picker =
+                                        final ImagePicker picker0 =
                                             ImagePicker();
                                         if (!widget.isMultiple) {
                                           final XFile? image =
-                                              await _picker.pickImage(
+                                              await picker0.pickImage(
                                                   source: ImageSource.gallery);
                                           if (image == null) {
                                             return;
@@ -399,7 +398,7 @@ class _CameraAppState extends State<CameraApp> {
                                           compress([file]);
                                         } else {
                                           final List<XFile> images =
-                                              await _picker.pickMultiImage();
+                                              await picker0.pickMultiImage();
                                           if (images.isEmpty) {
                                             return;
                                           }
@@ -425,7 +424,7 @@ class _CameraAppState extends State<CameraApp> {
                                         .toString();
                                     await ImageGallerySaver.saveImage(dataFile,
                                         quality: 100,
-                                        name: fileName + ".jpg",
+                                        name: "$fileName.jpg",
                                         isReturnImagePathOfIOS: true);
                                   }
                                   compress([file]);
@@ -529,8 +528,9 @@ class _CameraAppState extends State<CameraApp> {
       fileNew.writeAsBytesSync(List.from(blobBytes!));
       files2.add(fileNew);
     }
-
-    Navigator.pop(context, files2);
+    if (context.mounted) {
+      Navigator.of(context).pop(files2);
+    }
   }
 
   String dateTimeToString(DateTime dateTime, String pattern) {

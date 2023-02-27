@@ -36,7 +36,7 @@ class _MyAppState extends State<MyApp> {
                 onPressed: () async {
                   var data = await Navigator.of(context).push(
                     MaterialPageRoute<List<File>>(
-                      builder: (BuildContext context) => CameraApp(
+                      builder: (BuildContext context) => const CameraApp(
                           isMultiple: true,
                           isSimpleUI: true,
                           compressedSize: 100000),
