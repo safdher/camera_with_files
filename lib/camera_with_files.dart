@@ -265,7 +265,7 @@ class _CameraAppState extends State<CameraApp> {
                                         List<XFile>? images =
                                             await _picker.pickMultiImage();
                                         List<File> file = [];
-                                        for (var element in images!) {
+                                        for (var element in images) {
                                           file.add(File(element.path));
                                         }
                                         compress(file);
@@ -398,9 +398,9 @@ class _CameraAppState extends State<CameraApp> {
                                           File file = File(image.path);
                                           compress([file]);
                                         } else {
-                                          final List<XFile>? images =
+                                          final List<XFile> images =
                                               await _picker.pickMultiImage();
-                                          if (images == null) {
+                                          if (images.isEmpty) {
                                             return;
                                           }
                                           List<File> file = [];
@@ -524,7 +524,7 @@ class _CameraAppState extends State<CameraApp> {
       var dir = await getTemporaryDirectory();
       String trimmed = dir.absolute.path;
       String dateTimeString = DateTime.now().millisecondsSinceEpoch.toString();
-      String pathString = trimmed + "/" + dateTimeString + ".jpg";
+      String pathString = "$trimmed/$dateTimeString.jpg";
       File fileNew = File(pathString);
       fileNew.writeAsBytesSync(List.from(blobBytes!));
       files2.add(fileNew);
